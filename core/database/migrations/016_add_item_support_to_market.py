@@ -93,6 +93,7 @@ def down(cursor: sqlite3.Cursor):
     """
     回滚：移除对item类型的支持
     """
+    from astrbot.api import logger
     logger.info("正在回滚 016_add_item_support_to_market: 移除item类型支持...")
     
     # 1. 创建回滚的market表结构（只支持rod和accessory）

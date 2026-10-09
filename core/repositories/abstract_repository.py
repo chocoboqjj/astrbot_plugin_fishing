@@ -8,7 +8,7 @@ from datetime import date, datetime
 from ..domain.models import (
     User, Fish, Rod, Bait, Accessory, Title, Achievement, Item,
     UserRodInstance, UserAccessoryInstance, UserFishInventoryItem, UserAquariumItem,
-    FishingRecord, GachaRecord, WipeBombLog, MarketListing, TaxRecord,
+    FishingRecord, GachaRecord, WipeBombLog, MarketListing, TaxRecord, UserFishStat,
     GachaPool, GachaPoolItem, FishingZone, UserBuff, AquariumUpgrade,
     ShopOffer, ShopOfferCost, ShopOfferReward,
     Commodity, Exchange, UserCommodity  # 新增交易所模型导入
@@ -292,9 +292,6 @@ class AbstractInventoryRepository(ABC):
     # 删除一个饰品实例
     @abstractmethod
     def delete_accessory_instance(self, accessory_instance_id: int) -> None: pass
-    # 更新用户鱼类数量(增减)
-    @abstractmethod
-    def update_fish_quantity(self, user_id: str, fish_id: int, delta: int, quality_level: int = 0) -> None: pass
     # 获取钓鱼区域信息
     @abstractmethod
     def get_zone_by_id(self, zone_id: int) -> FishingZone: pass
@@ -728,53 +725,4 @@ class AbstractShopRepository(ABC):
     @abstractmethod
     def get_offer_by_id(self, offer_id: int) -> Optional[Dict[str, Any]]:
         """根据ID获取商品（兼容旧接口）"""
-        pass
-
-class AbstractRuntimeConfigRepository(ABC):
-    """运营配置覆盖仓储接口。
-
-    用于持久化后台在线下发的配置值，使运营调整无需重启插件。
-    """
-
-    @abstractmethod
-    def get_all_overrides(self, active_only: bool = True) -> List[Dict[str, Any]]:
-        """获取全部配置覆盖记录。"""
-        pass
-
-    @abstractmethod
-    def get_override(self, config_key: str) -> Optional[Dict[str, Any]]:
-        """根据点号路径获取单条覆盖记录。"""
-        pass
-
-    @abstractmethod
-    def upsert_override(
-        self,
-        config_key: str,
-        config_value: Optional[str],
-        value_type: str = "string",
-        category: Optional[str] = None,
-        description: Optional[str] = None,
-        updated_by: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """新增或更新一条配置覆盖（config_value 为 None 表示清除覆盖、沿用默认值）。"""
-        pass
-
-    @abstractmethod
-    def set_active(self, config_key: str, is_active: bool, updated_by: Optional[str] = None) -> bool:
-        """启用/停用某条覆盖，返回是否更新成功。"""
-        pass
-
-    @abstractmethod
-    def delete_override(self, config_key: str) -> bool:
-        """删除一条覆盖记录，返回是否删除成功。"""
-        pass
-
-    @abstractmethod
-    def reset_category(self, category: str) -> int:
-        """按配置块批量清除覆盖（恢复为默认值），返回清除条数。"""
-        pass
-
-    @abstractmethod
-    def reset_all(self) -> int:
-        """清除全部覆盖，返回清除条数。"""
         pass

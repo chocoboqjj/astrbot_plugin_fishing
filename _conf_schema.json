@@ -223,12 +223,28 @@
       "consecutive_bonuses": {
         "description": "连续签到额外奖励",
         "type": "object",
-        "hint": "key 为连续签到天数，value 为额外金币。示例：3天奖500，7天奖1500",
-        "default": {
-          "3": 500,
-          "7": 1500,
-          "15": 5000,
-          "30": 15000
+        "hint": "key 为连续签到天数，value 为额外金币",
+        "items": {
+          "3": {
+            "type": "int",
+            "default": 500,
+            "description": "连续签到 3 天的额外金币奖励"
+          },
+          "7": {
+            "type": "int",
+            "default": 1500,
+            "description": "连续签到 7 天的额外金币奖励"
+          },
+          "15": {
+            "type": "int",
+            "default": 5000,
+            "description": "连续签到 15 天的额外金币奖励"
+          },
+          "30": {
+            "type": "int",
+            "default": 15000,
+            "description": "连续签到 30 天的额外金币奖励"
+          }
         }
       }
     }
@@ -420,13 +436,93 @@
   "pond_upgrades": {
     "description": "鱼塘容量升级阶梯",
     "type": "object",
-    "hint": "配置鱼塘升级的各级容量与花费。容量应递增，费用涨幅建议与容量涨幅同阶（约8~10倍）",
-    "default": [
-      { "from": 480, "to": 2000, "cost": 50000 },
-      { "from": 2000, "to": 20000, "cost": 400000 },
-      { "from": 20000, "to": 200000, "cost": 5000000 },
-      { "from": 200000, "to": 1000000, "cost": 60000000 }
-    ]
+    "hint": "按序号配置鱼塘升级阶梯。容量应递增，费用涨幅建议与容量涨幅同阶",
+    "items": {
+      "1": {
+        "type": "object",
+        "description": "第 1 档扩容：480 → 2,000",
+        "items": {
+          "from": {
+            "type": "int",
+            "default": 480,
+            "description": "升级前的容量"
+          },
+          "to": {
+            "type": "int",
+            "default": 2000,
+            "description": "升级后的容量"
+          },
+          "cost": {
+            "type": "int",
+            "default": 50000,
+            "description": "升级所需金币"
+          }
+        }
+      },
+      "2": {
+        "type": "object",
+        "description": "第 2 档扩容：2,000 → 20,000",
+        "items": {
+          "from": {
+            "type": "int",
+            "default": 2000,
+            "description": "升级前的容量"
+          },
+          "to": {
+            "type": "int",
+            "default": 20000,
+            "description": "升级后的容量"
+          },
+          "cost": {
+            "type": "int",
+            "default": 400000,
+            "description": "升级所需金币"
+          }
+        }
+      },
+      "3": {
+        "type": "object",
+        "description": "第 3 档扩容：20,000 → 200,000",
+        "items": {
+          "from": {
+            "type": "int",
+            "default": 20000,
+            "description": "升级前的容量"
+          },
+          "to": {
+            "type": "int",
+            "default": 200000,
+            "description": "升级后的容量"
+          },
+          "cost": {
+            "type": "int",
+            "default": 5000000,
+            "description": "升级所需金币"
+          }
+        }
+      },
+      "4": {
+        "type": "object",
+        "description": "第 4 档扩容：200,000 → 1,000,000",
+        "items": {
+          "from": {
+            "type": "int",
+            "default": 200000,
+            "description": "升级前的容量"
+          },
+          "to": {
+            "type": "int",
+            "default": 1000000,
+            "description": "升级后的容量"
+          },
+          "cost": {
+            "type": "int",
+            "default": 60000000,
+            "description": "升级所需金币"
+          }
+        }
+      }
+    }
   },
   "refine": {
     "description": "装备精炼系统配置",
@@ -443,44 +539,445 @@
       "costs": {
         "description": "各等级精炼费用",
         "type": "object",
-        "hint": "key 为当前等级（1-10），value 为精炼到下一级的费用。实际费用 = 基础费用 × 稀有度系数",
-        "default": {
-          "1": 10000, "2": 30000, "3": 50000, "4": 100000,
-          "5": 200000, "6": 500000, "7": 1000000, "8": 2000000,
-          "9": 5000000, "10": 10000000
+        "hint": "key 为当前等级（1-10），实际费用 = 基础费用 × 稀有度系数",
+        "items": {
+          "1": {
+            "type": "int",
+            "default": 10000,
+            "description": "从 1 级精炼到下一级的费用"
+          },
+          "2": {
+            "type": "int",
+            "default": 30000,
+            "description": "从 2 级精炼到下一级的费用"
+          },
+          "3": {
+            "type": "int",
+            "default": 50000,
+            "description": "从 3 级精炼到下一级的费用"
+          },
+          "4": {
+            "type": "int",
+            "default": 100000,
+            "description": "从 4 级精炼到下一级的费用"
+          },
+          "5": {
+            "type": "int",
+            "default": 200000,
+            "description": "从 5 级精炼到下一级的费用"
+          },
+          "6": {
+            "type": "int",
+            "default": 500000,
+            "description": "从 6 级精炼到下一级的费用"
+          },
+          "7": {
+            "type": "int",
+            "default": 1000000,
+            "description": "从 7 级精炼到下一级的费用"
+          },
+          "8": {
+            "type": "int",
+            "default": 2000000,
+            "description": "从 8 级精炼到下一级的费用"
+          },
+          "9": {
+            "type": "int",
+            "default": 5000000,
+            "description": "从 9 级精炼到下一级的费用"
+          },
+          "10": {
+            "type": "int",
+            "default": 10000000,
+            "description": "从 10 级精炼到下一级的费用"
+          }
         }
       },
       "cost_multipliers": {
         "description": "精炼费用系数（按稀有度分档）",
         "type": "object",
         "hint": "key 为稀有度档位（1-2/3/4/5/6/7+）。设计原则：1→10级总费用随星级单调递增",
-        "default": {
-          "1-2": 0.20,
-          "3": 0.30,
-          "4": 0.42,
-          "5": 0.60,
-          "6": 0.80,
-          "7+": 1.00
+        "items": {
+          "1-2": {
+            "type": "float",
+            "default": 0.2,
+            "description": "1-2 星装备的费用系数"
+          },
+          "3": {
+            "type": "float",
+            "default": 0.3,
+            "description": "3 星装备的费用系数"
+          },
+          "4": {
+            "type": "float",
+            "default": 0.42,
+            "description": "4 星装备的费用系数"
+          },
+          "5": {
+            "type": "float",
+            "default": 0.6,
+            "description": "5 星装备的费用系数"
+          },
+          "6": {
+            "type": "float",
+            "default": 0.8,
+            "description": "6 星装备的费用系数"
+          },
+          "7+": {
+            "type": "float",
+            "default": 1.0,
+            "description": "7+ 星装备的费用系数"
+          }
         }
       },
       "success_rates": {
         "description": "各稀有度档的精炼成功率",
         "type": "object",
-        "hint": "key 为稀有度档位（1-2/3/4/5/6/7+），value 为 10 个等级的��功率数组。装备仅可使用高于自身星级的档位",
-        "default": {
-          "1-2": [0.95, 0.95, 0.90, 0.90, 0.85, 0.80, 0.75, 0.70, 0.60, 0.50],
-          "3": [0.90, 0.90, 0.85, 0.85, 0.80, 0.75, 0.65, 0.55, 0.45, 0.35],
-          "4": [0.85, 0.85, 0.80, 0.80, 0.75, 0.70, 0.60, 0.50, 0.40, 0.30],
-          "5": [0.85, 0.85, 0.80, 0.75, 0.65, 0.50, 0.40, 0.35, 0.30, 0.25],
-          "6": [0.80, 0.80, 0.75, 0.70, 0.60, 0.45, 0.35, 0.30, 0.25, 0.20],
-          "7+": [0.80, 0.80, 0.80, 0.80, 0.70, 0.60, 0.50, 0.40, 0.30, 0.20]
+        "hint": "装备只会使用「不低于自身星级」的第一档",
+        "items": {
+          "1-2": {
+            "type": "object",
+            "description": "1-2 星装备的精炼成功率（key 为目标等级 1-10）",
+            "items": {
+              "1": {
+                "type": "float",
+                "default": 0.95,
+                "description": "精炼到 1 级的成功率"
+              },
+              "2": {
+                "type": "float",
+                "default": 0.95,
+                "description": "精炼到 2 级的成功率"
+              },
+              "3": {
+                "type": "float",
+                "default": 0.9,
+                "description": "精炼到 3 级的成功率"
+              },
+              "4": {
+                "type": "float",
+                "default": 0.9,
+                "description": "精炼到 4 级的成功率"
+              },
+              "5": {
+                "type": "float",
+                "default": 0.85,
+                "description": "精炼到 5 级的成功率"
+              },
+              "6": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 6 级的成功率"
+              },
+              "7": {
+                "type": "float",
+                "default": 0.75,
+                "description": "精炼到 7 级的成功率"
+              },
+              "8": {
+                "type": "float",
+                "default": 0.7,
+                "description": "精炼到 8 级的成功率"
+              },
+              "9": {
+                "type": "float",
+                "default": 0.6,
+                "description": "精炼到 9 级的成功率"
+              },
+              "10": {
+                "type": "float",
+                "default": 0.5,
+                "description": "精炼到 10 级的成功率"
+              }
+            }
+          },
+          "3": {
+            "type": "object",
+            "description": "3 星装备的精炼成功率（key 为目标等级 1-10）",
+            "items": {
+              "1": {
+                "type": "float",
+                "default": 0.9,
+                "description": "精炼到 1 级的成功率"
+              },
+              "2": {
+                "type": "float",
+                "default": 0.9,
+                "description": "精炼到 2 级的成功率"
+              },
+              "3": {
+                "type": "float",
+                "default": 0.85,
+                "description": "精炼到 3 级的成功率"
+              },
+              "4": {
+                "type": "float",
+                "default": 0.85,
+                "description": "精炼到 4 级的成功率"
+              },
+              "5": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 5 级的成功率"
+              },
+              "6": {
+                "type": "float",
+                "default": 0.75,
+                "description": "精炼到 6 级的成功率"
+              },
+              "7": {
+                "type": "float",
+                "default": 0.65,
+                "description": "精炼到 7 级的成功率"
+              },
+              "8": {
+                "type": "float",
+                "default": 0.55,
+                "description": "精炼到 8 级的成功率"
+              },
+              "9": {
+                "type": "float",
+                "default": 0.45,
+                "description": "精炼到 9 级的成功率"
+              },
+              "10": {
+                "type": "float",
+                "default": 0.35,
+                "description": "精炼到 10 级的成功率"
+              }
+            }
+          },
+          "4": {
+            "type": "object",
+            "description": "4 星装备的精炼成功率（key 为目标等级 1-10）",
+            "items": {
+              "1": {
+                "type": "float",
+                "default": 0.85,
+                "description": "精炼到 1 级的成功率"
+              },
+              "2": {
+                "type": "float",
+                "default": 0.85,
+                "description": "精炼到 2 级的成功率"
+              },
+              "3": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 3 级的成功率"
+              },
+              "4": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 4 级的成功率"
+              },
+              "5": {
+                "type": "float",
+                "default": 0.75,
+                "description": "精炼到 5 级的成功率"
+              },
+              "6": {
+                "type": "float",
+                "default": 0.7,
+                "description": "精炼到 6 级的成功率"
+              },
+              "7": {
+                "type": "float",
+                "default": 0.6,
+                "description": "精炼到 7 级的成功率"
+              },
+              "8": {
+                "type": "float",
+                "default": 0.5,
+                "description": "精炼到 8 级的成功率"
+              },
+              "9": {
+                "type": "float",
+                "default": 0.4,
+                "description": "精炼到 9 级的成功率"
+              },
+              "10": {
+                "type": "float",
+                "default": 0.3,
+                "description": "精炼到 10 级的成功率"
+              }
+            }
+          },
+          "5": {
+            "type": "object",
+            "description": "5 星装备的精炼成功率（key 为目标等级 1-10）",
+            "items": {
+              "1": {
+                "type": "float",
+                "default": 0.85,
+                "description": "精炼到 1 级的成功率"
+              },
+              "2": {
+                "type": "float",
+                "default": 0.85,
+                "description": "精炼到 2 级的成功率"
+              },
+              "3": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 3 级的成功率"
+              },
+              "4": {
+                "type": "float",
+                "default": 0.75,
+                "description": "精炼到 4 级的成功率"
+              },
+              "5": {
+                "type": "float",
+                "default": 0.65,
+                "description": "精炼到 5 级的成功率"
+              },
+              "6": {
+                "type": "float",
+                "default": 0.5,
+                "description": "精炼到 6 级的成功率"
+              },
+              "7": {
+                "type": "float",
+                "default": 0.4,
+                "description": "精炼到 7 级的成功率"
+              },
+              "8": {
+                "type": "float",
+                "default": 0.35,
+                "description": "精炼到 8 级的成功率"
+              },
+              "9": {
+                "type": "float",
+                "default": 0.3,
+                "description": "精炼到 9 级的成功率"
+              },
+              "10": {
+                "type": "float",
+                "default": 0.25,
+                "description": "精炼到 10 级的成功率"
+              }
+            }
+          },
+          "6": {
+            "type": "object",
+            "description": "6 星装备的精炼成功率（key 为目标等级 1-10）",
+            "items": {
+              "1": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 1 级的成功率"
+              },
+              "2": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 2 级的成功率"
+              },
+              "3": {
+                "type": "float",
+                "default": 0.75,
+                "description": "精炼到 3 级的成功率"
+              },
+              "4": {
+                "type": "float",
+                "default": 0.7,
+                "description": "精炼到 4 级的成功率"
+              },
+              "5": {
+                "type": "float",
+                "default": 0.6,
+                "description": "精炼到 5 级的成功率"
+              },
+              "6": {
+                "type": "float",
+                "default": 0.45,
+                "description": "精炼到 6 级的成功率"
+              },
+              "7": {
+                "type": "float",
+                "default": 0.35,
+                "description": "精炼到 7 级的成功率"
+              },
+              "8": {
+                "type": "float",
+                "default": 0.3,
+                "description": "精炼到 8 级的成功率"
+              },
+              "9": {
+                "type": "float",
+                "default": 0.25,
+                "description": "精炼到 9 级的成功率"
+              },
+              "10": {
+                "type": "float",
+                "default": 0.2,
+                "description": "精炼到 10 级的成功率"
+              }
+            }
+          },
+          "7+": {
+            "type": "object",
+            "description": "7+ 星装备的精炼成功率（key 为目标等级 1-10）",
+            "items": {
+              "1": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 1 级的成功率"
+              },
+              "2": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 2 级的成功率"
+              },
+              "3": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 3 级的成功率"
+              },
+              "4": {
+                "type": "float",
+                "default": 0.8,
+                "description": "精炼到 4 级的成功率"
+              },
+              "5": {
+                "type": "float",
+                "default": 0.7,
+                "description": "精炼到 5 级的成功率"
+              },
+              "6": {
+                "type": "float",
+                "default": 0.6,
+                "description": "精炼到 6 级的成功率"
+              },
+              "7": {
+                "type": "float",
+                "default": 0.5,
+                "description": "精炼到 7 级的成功率"
+              },
+              "8": {
+                "type": "float",
+                "default": 0.4,
+                "description": "精炼到 8 级的成功率"
+              },
+              "9": {
+                "type": "float",
+                "default": 0.3,
+                "description": "精炼到 9 级的成功率"
+              },
+              "10": {
+                "type": "float",
+                "default": 0.2,
+                "description": "精炼到 10 级的成功率"
+              }
+            }
+          }
         }
       },
       "downgrade_chance": {
         "description": "精炼失败降级概率",
         "type": "float",
         "hint": "精炼失败时装备等级 -1 的概率（不会毁坏）",
-        "default": 0.10,
+        "default": 0.1,
         "min": 0.0,
         "max": 1.0
       },
@@ -495,23 +992,59 @@
         "description": "精炼失败毁坏概率（按稀有度分档）",
         "type": "object",
         "hint": "key 为稀有度档位。仅在精炼等级 >= min_level_for_destruction 时生效",
-        "default": {
-          "1-2": 0.30,
-          "3-4": 0.35,
-          "5-6": 0.40,
-          "7+": 0.50
+        "items": {
+          "1-2": {
+            "type": "float",
+            "default": 0.3,
+            "description": "1-2 星装备的毁坏概率"
+          },
+          "3-4": {
+            "type": "float",
+            "default": 0.35,
+            "description": "3-4 星装备的毁坏概率"
+          },
+          "5-6": {
+            "type": "float",
+            "default": 0.4,
+            "description": "5-6 星装备的毁坏概率"
+          },
+          "7+": {
+            "type": "float",
+            "default": 0.5,
+            "description": "7+ 星装备的毁坏概率"
+          }
         }
       },
       "bonus_per_level": {
         "description": "每级精炼提供的加成比例",
         "type": "object",
         "hint": "key 为稀有度档位，value 为每级增加的加成比例。高星装备加成更保守",
-        "default": {
-          "1-3": 0.15,
-          "4": 0.12,
-          "5": 0.08,
-          "6": 0.05,
-          "7+": 0.03
+        "items": {
+          "1-3": {
+            "type": "float",
+            "default": 0.15,
+            "description": "1-3 星装备每级精炼的加成比例"
+          },
+          "4": {
+            "type": "float",
+            "default": 0.12,
+            "description": "4 星装备每级精炼的加成比例"
+          },
+          "5": {
+            "type": "float",
+            "default": 0.08,
+            "description": "5 星装备每级精炼的加成比例"
+          },
+          "6": {
+            "type": "float",
+            "default": 0.05,
+            "description": "6 星装备每级精炼的加成比例"
+          },
+          "7+": {
+            "type": "float",
+            "default": 0.03,
+            "description": "7+ 星装备每级精炼的加成比例"
+          }
         }
       }
     }
@@ -551,19 +1084,169 @@
       "levels": {
         "description": "各关卡成功率与倍率",
         "type": "object",
-        "hint": "数组，从第1关到第10关。每项含 success_rate（成功概率）与 multiplier（成功后倍率）",
-        "default": [
-          { "success_rate": 0.65, "multiplier": 1.55 },
-          { "success_rate": 0.60, "multiplier": 1.45 },
-          { "success_rate": 0.55, "multiplier": 1.55 },
-          { "success_rate": 0.50, "multiplier": 1.70 },
-          { "success_rate": 0.45, "multiplier": 1.90 },
-          { "success_rate": 0.40, "multiplier": 2.15 },
-          { "success_rate": 0.35, "multiplier": 2.50 },
-          { "success_rate": 0.30, "multiplier": 3.00 },
-          { "success_rate": 0.25, "multiplier": 3.70 },
-          { "success_rate": 0.20, "multiplier": 4.80 }
-        ]
+        "hint": "按序号配置各关卡。越往后成功率越低、倍率越高",
+        "items": {
+          "1": {
+            "type": "object",
+            "description": "第 1 关：成功率 0.65，成功倍率 1.55",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.65,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 1.55,
+                "description": "成功后本金倍率"
+              }
+            }
+          },
+          "2": {
+            "type": "object",
+            "description": "第 2 关：成功率 0.60，成功倍率 1.45",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.6,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 1.45,
+                "description": "成功后本金倍率"
+              }
+            }
+          },
+          "3": {
+            "type": "object",
+            "description": "第 3 关：成功率 0.55，成功倍率 1.55",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.55,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 1.55,
+                "description": "成功后本金倍率"
+              }
+            }
+          },
+          "4": {
+            "type": "object",
+            "description": "第 4 关：成功率 0.50，成功倍率 1.70",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.5,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 1.7,
+                "description": "成功后本金倍率"
+              }
+            }
+          },
+          "5": {
+            "type": "object",
+            "description": "第 5 关：成功率 0.45，成功倍率 1.90",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.45,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 1.9,
+                "description": "成功后本金倍率"
+              }
+            }
+          },
+          "6": {
+            "type": "object",
+            "description": "第 6 关：成功率 0.40，成功倍率 2.15",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.4,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 2.15,
+                "description": "成功后本金倍率"
+              }
+            }
+          },
+          "7": {
+            "type": "object",
+            "description": "第 7 关：成功率 0.35，成功倍率 2.50",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.35,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 2.5,
+                "description": "成功后本金倍率"
+              }
+            }
+          },
+          "8": {
+            "type": "object",
+            "description": "第 8 关：成功率 0.30，成功倍率 3.00",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.3,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 3.0,
+                "description": "成功后本金倍率"
+              }
+            }
+          },
+          "9": {
+            "type": "object",
+            "description": "第 9 关：成功率 0.25，成功倍率 3.70",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.25,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 3.7,
+                "description": "成功后本金倍率"
+              }
+            }
+          },
+          "10": {
+            "type": "object",
+            "description": "第 10 关：成功率 0.20，成功倍率 4.80",
+            "items": {
+              "success_rate": {
+                "type": "float",
+                "default": 0.2,
+                "description": "该关的成功概率"
+              },
+              "multiplier": {
+                "type": "float",
+                "default": 4.8,
+                "description": "成功后本金倍率"
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -667,7 +1350,7 @@
           },
           "fish_oil": {
             "type": "float",
-            "default": 0.10,
+            "default": 0.1,
             "description": "鱼油基础波动率（±10%）"
           }
         }
@@ -750,37 +1433,88 @@
       "commodities": {
         "description": "大宗商品行情参数",
         "type": "object",
-        "hint": "每个商品的波动率与风险描述。新增商品需同时在 commodities 表中登记",
+        "hint": "新增商品时需同时在 commodities 表中登记",
         "items": {
           "dried_fish": {
             "type": "object",
-            "default": {
-              "volatility": 0.08,
-              "risk": "稳健型",
-              "min_price": 3000,
-              "max_price": 12000
+            "description": "鱼干行情参数",
+            "items": {
+              "volatility": {
+                "type": "float",
+                "default": 0.08,
+                "description": "dried_fish 的基础波动率"
+              },
+              "risk": {
+                "type": "string",
+                "default": "稳健型",
+                "description": "风险类型描述"
+              },
+              "min_price": {
+                "type": "int",
+                "default": 3000,
+                "description": "价格下限"
+              },
+              "max_price": {
+                "type": "int",
+                "default": 12000,
+                "description": "价格上限"
+              }
             },
-            "description": "鱼干行情参数"
+            "hint": "dried_fish 的行情参数"
           },
           "fish_roe": {
             "type": "object",
-            "default": {
-              "volatility": 0.12,
-              "risk": "高风险",
-              "min_price": 5000,
-              "max_price": 30000
+            "description": "鱼卵行情参数",
+            "items": {
+              "volatility": {
+                "type": "float",
+                "default": 0.12,
+                "description": "fish_roe 的基础波动率"
+              },
+              "risk": {
+                "type": "string",
+                "default": "高风险",
+                "description": "风险类型描述"
+              },
+              "min_price": {
+                "type": "int",
+                "default": 5000,
+                "description": "价格下限"
+              },
+              "max_price": {
+                "type": "int",
+                "default": 30000,
+                "description": "价格上限"
+              }
             },
-            "description": "鱼卵行情参数"
+            "hint": "fish_roe 的行情参数"
           },
           "fish_oil": {
             "type": "object",
-            "default": {
-              "volatility": 0.10,
-              "risk": "投机品",
-              "min_price": 4000,
-              "max_price": 25000
+            "description": "鱼油行情参数",
+            "items": {
+              "volatility": {
+                "type": "float",
+                "default": 0.1,
+                "description": "fish_oil 的基础波动率"
+              },
+              "risk": {
+                "type": "string",
+                "default": "投机品",
+                "description": "风险类型描述"
+              },
+              "min_price": {
+                "type": "int",
+                "default": 4000,
+                "description": "价格下限"
+              },
+              "max_price": {
+                "type": "int",
+                "default": 25000,
+                "description": "价格上限"
+              }
             },
-            "description": "鱼油行情参数"
+            "hint": "fish_oil 的行情参数"
           }
         }
       }

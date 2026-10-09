@@ -131,6 +131,7 @@ def up(cursor: sqlite3.Cursor):
 
 def down(cursor: sqlite3.Cursor):
     """回滚：删除新的商店系统表"""
+    from astrbot.api import logger
     logger.info("正在回滚 021_refactor_shop_system...")
     cursor.execute("DROP TABLE IF EXISTS shop_purchase_records")
     cursor.execute("DROP TABLE IF EXISTS shop_item_rewards")

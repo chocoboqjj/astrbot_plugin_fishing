@@ -79,6 +79,7 @@ def down(cursor: sqlite3.Cursor):
     """
     回滚：仅移除唯一索引（SQLite 删除列较复杂，保持列存在）。
     """
+    from astrbot.api import logger
     try:
         cursor.execute("DROP INDEX IF EXISTS idx_user_rods_display_code")
     except Exception:

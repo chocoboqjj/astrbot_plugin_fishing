@@ -1,4 +1,7 @@
 pyyaml>=6.0
 quart
+hypercorn>=0.16.0
 requests
 numpy>=1.21.0
+pillow>=9.0.0
+aiohttp>=3.8.0

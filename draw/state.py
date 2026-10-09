@@ -9,7 +9,7 @@ import json
 from .utils import get_user_avatar
 from .styles import (
     COLOR_SUCCESS, COLOR_WARNING, COLOR_ERROR, COLOR_GOLD, COLOR_RARE,
-    COLOR_REFINE_RED, COLOR_REFINE_ORANGE, COLOR_CORNER, load_font
+    COLOR_REFINE_RED, COLOR_REFINE_ORANGE, COLOR_CORNER
 )
 from .text_utils import load_font_with_cjk_fallback, draw_text_smart
 
@@ -72,10 +72,21 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
 
     # 2. 加载字体（称号字体使用CJK回退支持）
     def load_font(name, size):
-        path = os.path.join(os.path.dirname(__file__), "resource", name)
+        """按文件名加载字体。
+
+        主字体缺失时依次退回自带的 CJK 字体，最后才用 PIL 默认字体，
+        避免中文/繁体渲染成方块。返回对象始终为 FreeTypeFont，
+        以便直接用于 draw.text() 与 get_text_size()。
+        """
+        resource_dir = os.path.join(os.path.dirname(__file__), "resource")
         try:
-            return ImageFont.truetype(path, size)
-        except Exception as e:
+            return ImageFont.truetype(os.path.join(resource_dir, name), size)
+        except Exception:
+            for fallback_name in ("NotoSansTC-Bold.ttf", "NotoSansJP-Bold.ttf"):
+                try:
+                    return ImageFont.truetype(os.path.join(resource_dir, fallback_name), size)
+                except Exception:
+                    continue
             return ImageFont.load_default()
 
     font_path = os.path.join(os.path.dirname(__file__), "resource", "DouyinSansBold.otf")

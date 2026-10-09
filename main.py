@@ -39,7 +39,7 @@ from .core.services.sicbo_service import SicboService # 新增骰宝Service
 from .core.services.red_packet_service import RedPacketService # 新增红包Service
 
 from .core.database.migration import run_migrations
-from .core.config_defaults import build_game_config
+from .core.config_defaults import build_game_config, DEFAULT_TAX_CONFIG
 
 # ==========================================================
 # 导入所有指令函数
@@ -69,12 +69,13 @@ class FishingPlugin(Star):
         # 税收开关直接决定是否启动税收后台线程，这里先取原始值；
         # game_config 组装完成后（见下方 1.2）会再对齐一次，确保与 Service 读到的是同一份配置。
         tax_config = config.get("tax", {}) if isinstance(config, dict) else {}
-        self.is_tax = tax_config.get("is_tax", True)  # 是否开启税收
-        self.threshold = tax_config.get("threshold", 1000000)  # 起征点
-        self.step_coins = tax_config.get("step_coins", 100000)
-        self.step_rate = tax_config.get("step_rate", 0.01)
-        self.max_rate = tax_config.get("max_rate", 0.2)  # 最大税率
-        self.min_rate = tax_config.get("min_rate", 0.001)  # 最小税率
+        # 兜底值统一取自 DEFAULT_TAX_CONFIG，避免此处与配置默认值漂移。
+        self.is_tax = tax_config.get("is_tax", DEFAULT_TAX_CONFIG["is_tax"])  # 是否开启税收
+        self.threshold = tax_config.get("threshold", DEFAULT_TAX_CONFIG["threshold"])  # 起征点
+        self.step_coins = tax_config.get("step_coins", DEFAULT_TAX_CONFIG["step_coins"])
+        self.step_rate = tax_config.get("step_rate", DEFAULT_TAX_CONFIG["step_rate"])
+        self.max_rate = tax_config.get("max_rate", DEFAULT_TAX_CONFIG["max_rate"])  # 最大税率
+        self.min_rate = tax_config.get("min_rate", DEFAULT_TAX_CONFIG["min_rate"])  # 最小税率
         self.area2num = config.get("area2num", 2000)
         self.area3num = config.get("area3num", 500)
         
@@ -107,12 +108,12 @@ class FishingPlugin(Star):
 
         # 税收相关字段以 game_config 为准，避免 Plugin 属性与 Service 各读一份导致不一致
         tax_game_config = self.game_config.get("tax", {})
-        self.is_tax = tax_game_config.get("is_tax", True)
-        self.threshold = tax_game_config.get("threshold", 1000000)
-        self.step_coins = tax_game_config.get("step_coins", 100000)
-        self.step_rate = tax_game_config.get("step_rate", 0.01)
-        self.max_rate = tax_game_config.get("max_rate", 0.2)
-        self.min_rate = tax_game_config.get("min_rate", 0.001)
+        self.is_tax = tax_game_config.get("is_tax", DEFAULT_TAX_CONFIG["is_tax"])
+        self.threshold = tax_game_config.get("threshold", DEFAULT_TAX_CONFIG["threshold"])
+        self.step_coins = tax_game_config.get("step_coins", DEFAULT_TAX_CONFIG["step_coins"])
+        self.step_rate = tax_game_config.get("step_rate", DEFAULT_TAX_CONFIG["step_rate"])
+        self.max_rate = tax_game_config.get("max_rate", DEFAULT_TAX_CONFIG["max_rate"])
+        self.min_rate = tax_game_config.get("min_rate", DEFAULT_TAX_CONFIG["min_rate"])
 
         # 初始化数据库模式
         plugin_root_dir = os.path.dirname(__file__)

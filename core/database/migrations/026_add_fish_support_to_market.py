@@ -105,6 +105,7 @@ def down(cursor: sqlite3.Cursor):
     """
     回滚：移除对fish类型的支持
     """
+    from astrbot.api import logger
     logger.info("正在回滚 026_add_fish_support_to_market: 移除fish类型支持...")
     
     # 1. 创建回滚的market表结构（只支持rod、accessory和item）

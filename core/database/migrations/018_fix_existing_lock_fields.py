@@ -45,5 +45,6 @@ def down(cursor: sqlite3.Cursor):
     """
     回滚：这个迁移不需要回滚，因为它只是修复数据
     """
+    from astrbot.api import logger
     logger.info("018_fix_existing_lock_fields 不需要回滚")
     pass
