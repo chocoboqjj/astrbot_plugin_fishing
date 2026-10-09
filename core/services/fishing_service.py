@@ -18,6 +18,7 @@ from ..repositories.abstract_repository import (
 from ..domain.models import FishingRecord, TaxRecord, FishingZone
 from ..services.fishing_zone_service import FishingZoneService
 from ..utils import get_now, get_fish_template, get_today, get_last_reset_time, calculate_after_refine
+from ..initial_data import BAIT_WEIGHT_BONUS
 
 
 class FishingService:
@@ -59,6 +60,11 @@ class FishingService:
         # 通知目标可配置，默认群聊。可由 config['notifications']['relocation_target'] 覆盖
         notifications_cfg = self.config.get("notifications", {}) if isinstance(self.config, dict) else {}
         self._notification_target = notifications_cfg.get("relocation_target", "group")
+
+        # 后台线程轮询间隔（可通过 game 配置块覆盖，避免调试时必须改代码）
+        game_cfg = self.config.get("game", {}) if isinstance(self.config, dict) else {}
+        self._auto_fishing_interval = game_cfg.get("auto_fishing_interval", 40)
+        self._daily_tax_interval = game_cfg.get("daily_tax_interval", 3600)
         
 
     def register_notifier(self, notifier, default_target: Optional[str] = None):
@@ -141,11 +147,14 @@ class FishingService:
         user.coins -= fishing_cost
 
         # 2. 计算各种加成和修正值
-        base_success_rate = 0.7 # 基础成功率70%
+        # 基础成功率可由配置覆盖（fishing.base_success_rate，默认 0.7）
+        fishing_cfg = self.config.get("fishing", {}) if isinstance(self.config, dict) else {}
+        base_success_rate = fishing_cfg.get("base_success_rate", 0.7)
         quality_modifier = 1.0 # 品质加成
         quantity_modifier = 1.0 # 数量加成
         rare_chance = 0.0 # 稀有鱼出现几率
         coins_chance = 0.0 # 增加同稀有度高金币出现几率
+        weight_modifier = 1.0 # 重量加成（影响单条鱼的最大/最小重量区间）
 
         # --- 新增：应用 Buff 效果 ---
         active_buffs = self.buff_repo.get_all_active_by_user(user_id)
@@ -246,6 +255,11 @@ class FishingService:
                 base_success_rate += bait_template.success_rate_modifier
                 garbage_reduction_modifier = bait_template.garbage_reduction_modifier
                 coins_chance += bait_template.value_modifier
+                # 鱼饵重量加成：对应「巨物诱饵」这类增加体型/重量的道具。
+                # 从 BaitWeightBonus 读取（见 initial_data.BAIT_WEIGHT_BONUS）。
+                weight_bonus = BAIT_WEIGHT_BONUS.get(bait_template.name, 0.0)
+                if weight_bonus:
+                    weight_modifier += weight_bonus
         logger.debug(f"使用鱼饵加成后： base_success_rate={base_success_rate}, quality_modifier={quality_modifier}, quantity_modifier={quantity_modifier}, rare_chance={rare_chance}, coins_chance={coins_chance}")
         # 3. 判断是否成功钓到
         if random.random() >= base_success_rate:
@@ -301,8 +315,10 @@ class FishingService:
         if not fish_template:
              return {"success": False, "message": "错误：当前条件下没有可钓的鱼！"}
 
-        # 如果有垃圾鱼减少修正，则应用，价值 < 5则被视为垃圾鱼
-        if garbage_reduction_modifier is not None and fish_template.base_value < 5:
+        # 如果有垃圾鱼减少修正，则应用；垃圾鱼阈值可通过 fishing.garbage_fish_value_threshold 配置
+        fishing_cfg = self.config.get("fishing", {}) if isinstance(self.config, dict) else {}
+        garbage_threshold = fishing_cfg.get("garbage_fish_value_threshold", 5)
+        if garbage_reduction_modifier is not None and fish_template.base_value < garbage_threshold:
             # 根据垃圾鱼减少修正值决定是否重新选择一次
             if random.random() < garbage_reduction_modifier:
                 # 重新选择一条鱼
@@ -313,7 +329,13 @@ class FishingService:
                     fish_template = new_fish_template
 
         # 计算最终属性
-        weight = random.randint(fish_template.min_weight, fish_template.max_weight)
+        # 重量加成（如「巨物诱饵」）：整体放大该鱼种的重量区间
+        min_w = int(fish_template.min_weight * weight_modifier)
+        max_w = int(fish_template.max_weight * weight_modifier)
+        # 保证区间有效且为正（防止极端数值导致 randint 报错）
+        min_w = max(1, min_w)
+        max_w = max(min_w, max_w)
+        weight = random.randint(min_w, max_w)
         value = fish_template.base_value
 
         # 4.2 按品质加成给予额外品质（重量/价值）奖励
@@ -326,21 +348,26 @@ class FishingService:
             # log2(x) 特性：log2(1)=0, log2(2)=1, log2(4)=2
             # 天然适合处理乘法累积：log2(a×b) = log2(a) + log2(b)
             log_value = math.log2(quality_modifier)
-            
+
             # 从配置获取高品质鱼最大触发概率，默认35%
             max_quality_chance = self.config.get("quality_bonus_max_chance", 0.35)
-            
-            # 缩放到配置的上限，让 quality_modifier=4.0 时达到上限
-            # 缩放系数 = max_chance / 2（因为 log2(4) = 2）
-            scale_factor = max_quality_chance / 2.0
+            # 缩放系数可通过配置调整（quality_chance_scale，默认 0.5）。
+            # 历史取值 0.175（= 0.35/2）过于保守：满配品质加成 ×1.44 仅能提供
+            # 4.6% 的高品质概率，相对 rare_chance 的 4倍收益几乎可忽略，
+            # 导致「品质加成」成为鸡肋属性。现提高到 0.5，
+            # 使满配（×1.44）达到 log2(1.44)×0.5 ≈ 26% 的高品质概率。
+            scale_factor = self.config.get("quality_chance_scale", 0.5)
+
+            # 缩放到配置的上限，让 quality_modifier 达到 2.0 时触及上限
             adjusted_chance = log_value * scale_factor
-            
+
             # 确保不超过配置的上限，避免高品质鱼过于常见
             final_chance = min(adjusted_chance, max_quality_chance)
-            
+
             quality_bonus = random.random() <= final_chance
         if quality_bonus:
-            extra_weight = random.randint(fish_template.min_weight, fish_template.max_weight)
+            # 高品质鱼额外投一次重量（同样应用重量加成，保持与普通鱼的一致性）
+            extra_weight = random.randint(min_w, max_w)
             weight += extra_weight
             # 标记为高品质鱼，价值在出售时按2倍计算
             quality_level = 1
@@ -622,12 +649,16 @@ class FishingService:
         
         # 转换系数：1.0 表示 rare_chance 直接作为权重转移比例
         # 例如 rare_chance=0.46 → 从低星转移 46% 的权重到中高星
-        TRANSFER_FACTOR = 1.0
-        
+        # 可通过配置 fishing.rare_chance_transfer_factor 调整强度
+        fishing_cfg = self.config.get("fishing", {}) if isinstance(self.config, dict) else {}
+        TRANSFER_FACTOR = fishing_cfg.get("rare_chance_transfer_factor", 1.0)
+
         actual_boost = rare_chance * TRANSFER_FACTOR
-        
-        # 限制上限为 0.8，防止低星概率被转移到接近 0 导致游戏体验失衡
-        actual_boost = min(actual_boost, 0.8)
+
+        # 限制上限（默认 1.0），防止低星概率被转移到接近 0 导致游戏体验失衡
+        # 注意：装备满配稀有可达 0.92，上限不能低于该值，否则精炼 9~10 级零收益
+        max_boost = fishing_cfg.get("rare_chance_max_boost", 1.0)
+        actual_boost = min(actual_boost, max_boost)
         
         new_distribution = distribution.copy()
         
@@ -660,8 +691,20 @@ class FishingService:
                 ratio = new_distribution[i] / mid_high_star_total
                 new_distribution[i] = new_distribution[i] + transfer_amount * ratio
         
-        # 步骤 3：6+星（索引 5）完全不参与上述计算，保持原值
-        # 这确保了超稀有鱼的概率不受装备影响，维持其珍贵性和神秘感
+        # 步骤 3：6+ 星（索引 5）按「稀有加成的低敏感度」等比放大，并设绝对上限。
+        # 为什么需要这一步：早期实现让 6+ 星完全不参与加成，导致
+        #   · 顶级鱼完全靠运气，装备在高价值区毫无用处（实测区域4 裸装与满配的 6星+ 均为 4.00%）
+        #   · 「收集 6/7/8 星鱼」只能靠反复刷，缺少正反馈
+        # 现在让装备能「略微」提升顶级鱼概率：
+        #   · 放大倍数 = 1 + boost × 0.35，远小于 4-5 星（等价于 +boost×0.35 的转移量）
+        #   · 绝对占比封顶 12%，确保顶级鱼依旧稀缺
+        ULTRA_BOOST_SENSITIVITY = 0.35
+        MAX_ULTRA_SHARE = 0.12
+        if new_distribution[5] > 0:
+            new_distribution[5] = min(
+                new_distribution[5] * (1.0 + actual_boost * ULTRA_BOOST_SENSITIVITY),
+                MAX_ULTRA_SHARE,
+            )
         
         # 归一化处理：确保所有概率之和精确为 1.0
         # 这是必要的，因为浮点运算可能产生微小误差
@@ -798,11 +841,14 @@ class FishingService:
         
         logger.info(f"[税收-{execution_id}] 开始检查每日资产税（执行ID: {execution_id}）")
         
-        threshold = tax_config.get("threshold", 1000000)
-        step_coins = tax_config.get("step_coins", 1000000)
+        # 兜底默认值必须与 core/config_defaults.DEFAULT_TAX_CONFIG 保持一致，
+        # 否则配置缺失时会回退到过时的 100万起征 / 20% 上限，
+        # 造成「平时没事、配置一缺就崩盘」的隐性 Bug。
+        threshold = tax_config.get("threshold", 10000000)
+        step_coins = tax_config.get("step_coins", 5000000)
         step_rate = tax_config.get("step_rate", 0.01)
         min_rate = tax_config.get("min_rate", 0.001)
-        max_rate = tax_config.get("max_rate", 0.2)
+        max_rate = tax_config.get("max_rate", 0.10)
         
         logger.info(f"[税收-{execution_id}] 税收配置：起征点={threshold}, 步长={step_coins}, 步长税率={step_rate*100}%, 最小税率={min_rate*100}%, 最大税率={max_rate*100}%")
 
@@ -1014,9 +1060,9 @@ class FishingService:
         
         while self.tax_running:
             try:
-                # 第一次检查不sleep，之后每小时检查一次
+                # 第一次检查不sleep，之后按配置的间隔检查一次（默认 3600 秒）
                 if not first_check:
-                    time.sleep(3600)
+                    time.sleep(self._daily_tax_interval)
                 
                 # 检查是否到达每日重置时间点
                 current_reset_time = get_last_reset_time(self.daily_reset_hour)
@@ -1143,8 +1189,8 @@ class FishingService:
                     # else:
                     #      logger.info(f"用户 {user_id} 自动钓鱼失败: {result['message']}")
 
-                # 每轮检查间隔
-                time.sleep(40)
+                # 每轮检查间隔（可通过 game.auto_fishing_interval 配置，默认 40 秒）
+                time.sleep(self._auto_fishing_interval)
 
             except Exception as e:
                 logger.error(f"自动钓鱼任务出错: {e}")

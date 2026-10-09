@@ -135,6 +135,20 @@ FISH_DATA = [
 # 格式: (name, description, rarity, effect_description, duration_minutes, cost, required_rod_rarity,
 #        success_rate_modifier, rare_chance_modifier, garbage_reduction_modifier,
 #        value_modifier, quantity_modifier, is_consumable)
+# ==========================================================
+# 鱼饵重量加成表
+# ==========================================================
+# 为什么单独建表：重量加成不属于 BAIT_DATA 的现有字段
+# （success_rate / rare_chance / garbage_reduction / value / quantity），
+# 早期「巨物诱饵」标注了「重量 +20%」但无处落地，成为零加成的空壳道具。
+# 现通过本表 + fishing_service 的 weight_modifier 机制正式实现。
+#
+# 语义：单条鱼的 [min_weight, max_weight] 区间整体放大该比例。
+# 设计上限 0.5（即 +50%），避免单条鱼重量超出该鱼种数值的合理范围。
+BAIT_WEIGHT_BONUS = {
+    "巨物诱饵": 0.30,   # 重量 +30%
+}
+
 BAIT_DATA = [
     # --- Rarity 1 (基础) ---
     ("普通蚯蚓", "最基础的鱼饵，随处可见。", 1, "无特殊效果",
@@ -177,28 +191,52 @@ BAIT_DATA = [
      0, 1000, 3, 0.20, 0.0, 0.0, 1.0, 1.0, False),  # is_consumable = False
 
     # --- Rarity 5 (传说) ---
-    ("巨物诱饵", "蕴含着远古力量，能吸引庞然大物。", 5, "钓上的鱼最大重量潜力+20%",
-     0, 2500, 4, 0.0, 0.0, 0.0, 1.0, 1.0, True),  # (注: 重量潜力加成需在fishing_service中单独处理)
-
+    ("巨物诱饵", "蕴含着远古力量，能吸引庞然大物。", 5, "钓上的鱼重量 +30%，稀有 +2%，更容易钓到大个体",
+     0, 2500, 4, 0.0, 0.02, 0.0, 1.0, 1.0, True),
+    # 说明：巨物诱饵的「重量 +30%」通过 BAIT_WEIGHT_MODIFIER 机制实现
+    # （见 fishing_service._apply_weight_modifier）。此前该道具所有加成字段为 0，
+    # 是完全无效的空壳道具，现已补齐稀有加成并接入重量加成。
     ("丰饶号角粉末", "从丰收号角上刮下来的一点粉末。", 5, "下一次钓鱼必定获得双倍数量",
      0, 0, 5, 0.0, 0.0, 0.0, 1.0, 2.0, True)  # quantity_modifier = 2.0
 ]
 
 ROD_DATA = [
     # Format: (name, description, rarity, source, purchase_cost, quality_mod, quantity_mod, rare_mod, durability, icon_url)
+    # 定价原则：以「综合加成强度 / 星石」为锚点，星石产出受签到(1/天)、红包、活动限供，
+    # 因此 4 星定300、5 星定 900（约 30 天满签到+活动），避免高星装备成为不可能目标。
+    # 加成曲线设计（重要）
+    # ----------------------
+    # 四种属性的定位与强度必须均衡，实测「满配期望收益」应大致按下列比例分配：
+    #   rare_chance（稀有度）≈ 45%  —— 决定能否钓到高星鱼，是装备的核心价值
+    #   quantity_mod（数量）  ≈ 25%  —— 线性收益，玩家最易感知
+    #   quality_mod（品质）   ≈ 20%  —— 高品质鱼价值x2，是「惊喜感」来源
+    #   coins_chance（金币）  ≈ 10%  —— 同稀有度内偏向高价值鱼，锦上添花
+    #
+    # 早期版本中 rare_chance 独占 90%+ 收益，而 quality 仅提供 4.6% 高品质概率，
+    # 成为「鸡肋属性」。现已通过提高 quality_chance_scale 与 quantity 曲线重新平衡。
+    #
+    # 耐久设计：耐久是「消耗品」属性，不参与加成计算，仅提供手感与回收节奏。
+    # 规则：新手竿不设耐久（保护初期体验），之后每升一档耐久翻倍，
+    # 让高星竿虽然也会损耗，但单次可用时长始终高于低星竿 —— 避免「越升级越吃亏」。
+    # 换算：CD 180s 下，耐久 500≈ 41 小时、2000 ≈ 166 小时。
+    #
+    # 数量曲线：4 星起跳要明显，5 星达到峰值，使「五星装备」有清晰的目标感。
+    # 数量曲线：4星起跳要明显，5星达到峰值，使「五星装备」有清晰的目标感。
     ("新手木竿", "刚入门时的可靠伙伴", 1, "shop", 50, 1.0, 1.0, 0.0, None, None),
-    ("竹制鱼竿", "轻巧耐用", 2, "shop", 500, 1.0, 1.0, 0.01, None, None),
-    ("碳素纤维竿", "现代工艺的结晶", 3, "shop", 5000, 1.05, 1.0, 0.03, 1000, None),
-    ("星辰钓者", "蕴含星光力量的神秘鱼竿", 4, "gacha", None, 1.1, 1.0, 0.08, None, None),
-    ("海神之赐", "传说中海神波塞冬使用过的鱼竿", 5, "gacha", None, 1.2, 1.1, 0.15, None, None),
+    ("竹制鱼竿", "轻巧耐用", 2, "shop", 500, 1.04, 1.05, 0.01, 500, None),
+    ("碳素纤维竿", "现代工艺的结晶", 3, "shop", 5000, 1.10, 1.12, 0.03, 2000, None),
+    ("星辰钓者", "蕴含星光力量的神秘鱼竿", 4, "gacha", None, 1.18, 1.20, 0.08, 8000, None),
+    ("海神之赐", "传说中海神波塞冬使用过的鱼竿", 5, "gacha", None, 1.25, 1.30, 0.15, 30000, None),
 ]
 
 ACCESSORY_DATA = [
     # Format: (name, description, rarity, slot_type, quality_mod, quantity_mod, rare_mod, coin_mod, other_desc, icon_url)
-    ("幸运四叶草", "带来好运的小饰品", 2, "general", 1.05, 1.0, 0.01, 1.02, None, None),
-    ("渔夫的戒指", "刻有古老符文的戒指", 3, "general", 1.0, 1.0, 0.0, 1.10, None, None),
-    ("丰收号角", "象征丰收的魔法号角", 4, "general", 1.10, 1.05, 0.03, 1.15, None, None),
-    ("海洋之心", "传说中的宝石，能与海洋生物沟通", 5, "general", 1.20, 1.10, 0.05, 1.25, "大幅减少钓鱼等待时间", None),
+    # 定位分工：鱼竿给「稀有 + 数量」，饰品给「品质 + 金币」，两条线并行不抢定位。
+    # 渔夫戒指 3星刻意做纯金币向（coin 1.30，rare 0），为不想赌稀有的玩家提供确定性收益。
+    ("幸运四叶草", "带来好运的小饰品", 2, "general", 1.06, 1.0, 0.01, 1.05, None, None),
+    ("渔夫的戒指", "刻有古老符文的戒指，稳健的财富之选", 3, "general", 1.0, 1.0, 0.0, 1.30, "金币收益 +30%", None),
+    ("丰收号角", "象征丰收的魔法号角", 4, "general", 1.12, 1.08, 0.03, 1.20, None, None),
+    ("海洋之心", "传说中的宝石，能与海洋生物沟通", 5, "general", 1.22, 1.12, 0.05, 1.35, "大幅减少钓鱼等待时间", None),
 ]
 
 TITLE_DATA = [
@@ -454,8 +492,646 @@ ITEM_DATA = [
 ]
 
 SHOP_DATA = [
-    # Format: (shop_id, name, description, shop_type, is_active, start_time, end_time, sort_order)
-    (1, "海鸥港杂货铺", "为水手们提供基础补给的杂货铺。", "normal", True, None, None, 100),
-    (2, "七海珍宝阁", "传闻中收藏着来自七个海洋的奇珍异宝。", "premium", True, None, None, 200),
-    (3, "幽灵船黑市", "一艘神出鬼没的幽灵船，只在特定的时间出现。", "limited", True, "1492-10-12 00:00:00", "1492-10-12 23:59:59", 300),
+    # Format: (shop_id, name, description, shop_type, is_active, start_time, end_time, sort_order,
+    #          daily_start_time, daily_end_time)
+    # daily_start_time / daily_end_time 为 None 表示全天营业；支持 "21:00" ~ "04:00" 这样的跨日时段。
+    #
+    # 四店分工（每店只承担一种「消费决策」，避免玩家在杂货铺里翻找半天）：
+    #   店1 海鸥港杂货铺   金币 · 基础消耗（鱼饵/基础道具）  常驻无限
+    #   店2 七海珍宝阁     星石 · 装备与精炼保护（稀缺资源）  常驻限量
+    #   店3 黑潮交易所     金币 · 钱袋兑换（确定性收益）      每日限购
+    #   店4 幽灵船黑市     金币 · 偷鱼对抗道具（社交博弈）    每日 21:00~04:00
+    (1, "海鸥港杂货铺", "为水手们提供基础补给的杂货铺。", "normal", True, None, None, 100, None, None),
+    (2, "七海珍宝阁", "传闻中收藏着来自七个海洋的奇珍异宝。", "premium", True, None, None, 200, None, None),
+    (3, "黑潮交易所", "用金币兑换确定收益的补给，深夜开门。", "normal", True, None, None, 300, "00:00", "23:59"),
+    (4, "幽灵船黑市", "一艘神出鬼没的幽灵船，只在特定的时间出现。", "limited", True,
+     None, None, 400, "21:00", "04:00"),
 ]
+
+# ==========================================================
+# 商店商品种子数据
+# ==========================================================
+# 定价方法论
+# --------
+# 金币商品：以「区域期望收益」为锚。区域1≈39 / 区域2≈175 / 区域3≈960 金币每次，
+#           商品定价 ≈ 4~6 次钓鱼的收益，让「用时间换道具」划算但不取代钓鱼。
+# 星石商品：星石产出≈1 颗/天（签到）+ 红包/活动，按「获取天数」锚定：
+#           2星≈7天、3星≈14天、4星≈30天、5星≈90天。
+# 稀缺道具（护符/黑市）：用库存与限购制造稀缺，而非单纯抬价。
+#
+# 结构说明（每个商品为一个 dict）：
+#   shop_id      : 所属商店
+#   name         : 商品名（幂等去重依据，务必与模板名一致）
+#   description  : 商品描述
+#   category     : 分类标签，仅用于后台筛选，前台不渲染
+#   sort_order   : 排序（越小越靠前）
+#   stock_total       : 总库存，None 表示无限
+#   per_user_limit    : 每人限购总数，None 表示不限
+#   per_user_daily_limit : 每人每日限购，None 表示不限
+#   costs        : 成本列表，元素为 (cost_type, cost_amount, cost_item_id)
+#                 可扩展为 (cost_type, cost_amount, cost_item_id, relation, group_id, quality_level)
+#                 cost_type: coins / premium / item / fish / rod / accessory
+#   rewards      : 奖励列表，元素为 (reward_type, reward_item_id, reward_quantity, refine_level, quality_level)
+#                 reward_type: rod / accessory / bait / item / fish / coins
+#
+# 注意：前台仅在「奖励数量 >= 2」时展示奖励明细（见 handlers/market_handlers.py），
+#      单品商品若希望玩家看清内容，请配第二条奖励或改用礼包形态。
+SHOP_ITEM_DATA = [
+    # ====================商店1：海鸥港杂货铺（金币 · 基础消耗）====================
+    # 定位：钓鱼过程中真正会反复消耗的东西。定价贴近日常收益，让新手首小时就能买得起。
+    {
+        "shop_id": 1,
+        "name": "新手木竿",
+        "description": "刚入门时的可靠伙伴",
+        "category": "rod",
+        "sort_order": 101,
+        "costs": [("coins", 50, None)],
+        "rewards": [("rod", 1, 1, 1, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "竹制鱼竿",
+        "description": "轻巧耐用，稀有鱼几率 +1%",
+        "category": "rod",
+        "sort_order": 102,
+        "costs": [("coins", 500, None)],
+        "rewards": [("rod", 2, 1, 1, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "碳素纤维竿",
+        "description": "现代工艺的结晶，品质 +5%、稀有 +3%，耐久 1000",
+        "category": "rod",
+        "sort_order": 103,
+        "costs": [("coins", 5000, None)],
+        "rewards": [("rod", 3, 1, 1, 0)],
+    },
+    # --- 基础鱼饵：按「每点加成单价」定价，加成越强单价越高但增幅递减 ---
+    # 定价表（每点加成单价由 0.333 递减到 0.02，避免出现「越贵越划算」）：
+    #   普通蚯蚓 20金币  无加成（最便宜的基础款，让新手有最便宜的鱼饵可用）
+    #   面包团   60金币  /+2%成功率   → 每点0.333
+    #   玉米粒   80金币  / +2%            → 0.250（单价低于面包团，故售价更高但功能相同）
+    #   红虫     300金币  / +5%            → 0.167
+    #   腥味颗粒饵 450金币/ +8%            → 0.178
+    #   活虾     900金币  / +3%稀有+5%成功 → 0.106（稀有加成按更高权重折算）
+    #   万能饵  2200金币  / +15%           → 0.068
+    {
+        "shop_id": 1,
+        "name": "普通蚯蚓",
+        "description": "最基础的鱼饵，随处可见。作为新手最便宜的鱼饵选项",
+        "category": "bait",
+        "sort_order": 200,
+        "costs": [("coins", 20, None)],
+        "rewards": [("bait", 1, 5, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "面包团",
+        "description": "用面包捏成的简单鱼饵，钓鱼成功率 +2%",
+        "category": "bait",
+        "sort_order": 201,
+        "costs": [("coins", 60, None)],
+        "rewards": [("bait", 2, 5, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "玉米粒",
+        "description": "甜甜的玉米粒，钓鱼成功率 +2%。比面包团稍贵，但货源更稳定",
+        "category": "bait",
+        "sort_order": 202,
+        "costs": [("coins", 80, None)],
+        "rewards": [("bait", 3, 5, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "红虫",
+        "description": "营养丰富的鱼饵，钓鱼成功率 +5%",
+        "category": "bait",
+        "sort_order": 203,
+        "costs": [("coins", 300, None)],
+        "rewards": [("bait", 4, 5, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "亮片拟饵",
+        "description": "旋转时能反光的基础金属拟饵，稀有鱼几率 +1% 且无消耗，可长期使用",
+        "category": "bait",
+        "sort_order": 204,
+        "costs": [("coins", 400, None)],
+        "rewards": [("bait", 5, 1, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "腥味颗粒饵",
+        "description": "商业生产的鱼饵，钓鱼成功率 +8%（需1星竿）",
+        "category": "bait",
+        "sort_order": 205,
+        "costs": [("coins", 450, None)],
+        "rewards": [("bait", 6, 5, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "活虾",
+        "description": "活蹦乱跳的虾，稀有鱼几率 +3% 且成功率 +5%（需1星竿）",
+        "category": "bait",
+        "sort_order": 206,
+        "costs": [("coins", 900, None)],
+        "rewards": [("bait", 8, 3, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "万能饵",
+        "description": "精心调配，对大多数鱼类都有效果，钓鱼成功率 +15%",
+        "category": "bait",
+        "sort_order": 207,
+        "costs": [("coins", 2200, None)],
+        "rewards": [("bait", 7, 3, None, 0)],
+    },
+    # --- 高级鱼饵（原本放在珍宝阁用星石购买）---
+    # 调整原因：星石产出约 1 颗/天，而这些鱼饵的实际收益折算仅几百金币，
+    # 用星石购买溢价达 100~200 倍，导致「星石买消耗品」性价比极差。
+    # 现下移到杂货铺用金币购买，定价与效果严格对齐（每点加成单价 0.07~0.11）。
+    {
+        "shop_id": 1,
+        "name": "驱散垃圾饵",
+        "description": "散发着垃圾鱼讨厌的气味，80% 概率驱离垃圾鱼",
+        "category": "bait",
+        "sort_order": 208,
+        "costs": [("coins", 3000, None)],
+        "rewards": [("bait", 9, 3, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "秘制香饵",
+        "description": "用特殊配方制成，对稀有鱼类极具诱惑力，稀有鱼几率 +5%（需2星竿）",
+        "category": "bait",
+        "sort_order": 209,
+        "costs": [("coins", 2500, None)],
+        "rewards": [("bait", 10, 3, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "价值连城饵",
+        "description": "散发着财富的气息，钓上的鱼基础价值 +10%（需3星竿）",
+        "category": "bait",
+        "sort_order": 210,
+        "costs": [("coins", 3500, None)],
+        "rewards": [("bait", 11, 3, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "大师拟饵",
+        "description": "由钓鱼大师制作的完美拟饵，钓鱼成功率 +20% 且无消耗（需3星竿）",
+        "category": "bait",
+        "sort_order": 211,
+        "costs": [("coins", 4500, None)],
+        "rewards": [("bait", 12, 2, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "巨物诱饵",
+        "description": "蕴含着远古力量，能吸引庞然大物：重量 +30%、稀有 +2%（需4星竿）",
+        "category": "bait",
+        "sort_order": 212,
+        "costs": [("coins", 6000, None)],
+        "rewards": [("bait", 13, 2, None, 0)],
+    },
+    # --- 日常便利道具 ---
+    # 定价按「杂货铺对应新手区 39 金币/次」锚定，目标 2~8 次收益。
+    # 擦弹与守护类涉及其他系统（收益不在钓鱼产出内），故放在更贵的价位，
+    # 让玩家在攒够金币后自然消费。
+    {
+        "shop_id": 1,
+        "name": "便携式声呐",
+        "description": "立即执行一次钓鱼，跳过冷却",
+        "category": "item",
+        "sort_order": 301,
+        "per_user_daily_limit": 5,
+        "costs": [("coins", 120, None)],
+        "rewards": [("item", 3, 1, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "擦弹许可证",
+        "description": "官方许可证，今天额外获得 1 次擦弹机会",
+        "category": "item",
+        "sort_order": 302,
+        "per_user_daily_limit": 3,
+        "costs": [("coins", 600, None)],
+        "rewards": [("item", 6, 1, None, 0)],
+    },
+    {
+        "shop_id": 1,
+        "name": "守护海灵",
+        "description": "4 小时内你的鱼塘不会被其他玩家偷窃",
+        "category": "item",
+        "sort_order": 303,
+        "costs": [("coins", 800, None)],
+        "rewards": [("item", 14, 1, None, 0)],
+    },
+    # 新手礼包：让首次消费有「组合优惠」的感觉
+    {
+        "shop_id": 1,
+        "name": "启航礼包",
+        "description": "为新渔夫准备的一揽子补给，含鱼饵与金币。限购 1 次",
+        "category": "bundle",
+        "sort_order": 401,
+        "per_user_limit": 1,
+        "costs": [("coins", 800, None)],
+        "rewards": [
+            ("bait", 1, 10, None, 0),
+            ("bait", 2, 10, None, 0),
+            ("item", 1, 2, None, 0),
+            ("coins", None, 3000, None, 0),
+        ],
+    },
+    {
+        "shop_id": 1,
+        "name": "远洋补给箱",
+        "description": "中后期的日常补给组合，含高效鱼饵与护符。限购 5 次",
+        "category": "bundle",
+        "sort_order": 402,
+        "per_user_limit": 5,
+        "costs": [("coins", 45000, None)],
+        "rewards": [
+            ("bait", 7, 3, None, 0),
+            ("bait", 8, 3, None, 0),
+            ("item", 8, 1, None, 0),
+            ("item", 11, 1, None, 0),
+        ],
+    },
+
+    # ==================== 商店2：七海珍宝阁（星石 · 装备与精炼保护）====================
+    # 定位：星石是稀缺资源（约 1 颗/天），这里只放「值得长期追求」的东西。
+    {
+        "shop_id": 2,
+        "name": "幸运四叶草",
+        "description": "带来好运的小饰品，品质 +5%、稀有 +1%",
+        "category": "accessory",
+        "sort_order": 101,
+        "costs": [("premium", 20, None)],
+        "rewards": [("accessory", 1, 1, 1, 0)],
+    },
+    {
+        "shop_id": 2,
+        "name": "渔夫的戒指",
+        "description": "刻有古老符文的戒指，金币收益 +25%——稳健的财富之选",
+        "category": "accessory",
+        "sort_order": 102,
+        "costs": [("premium", 60, None)],
+        "rewards": [("accessory", 2, 1, 1, 0)],
+    },
+    {
+        "shop_id": 2,
+        "name": "丰收号角",
+        "description": "象征丰收的魔法号角，品质 +10%、数量 +5%",
+        "category": "accessory",
+        "sort_order": 103,
+        "costs": [("premium", 200, None)],
+        "rewards": [("accessory", 3, 1, 1, 0)],
+    },
+    {
+        "shop_id": 2,
+        "name": "星辰钓者",
+        "description": "蕴含星光力量的神秘鱼竿，品质 +10%、稀有 +8%",
+        "category": "rod",
+        "sort_order": 104,
+        "costs": [("premium", 300, None)],
+        "rewards": [("rod", 4, 1, 1, 0)],
+    },
+    # 顶级装备：库存 20 件，约 90 天星石积累，是全服最硬的长期目标
+    {
+        "shop_id": 2,
+        "name": "海洋之心",
+        "description": "传说中的宝石，品质 +20%、数量 +10%、稀有 +5%，并大幅减少钓鱼等待时间",
+        "category": "accessory",
+        "sort_order": 105,
+        "stock_total": 20,
+        "per_user_limit": 1,
+        "costs": [("premium", 900, None)],
+        "rewards": [("accessory", 4, 1, 1, 0)],
+    },
+    {
+        "shop_id": 2,
+        "name": "海神之赐",
+        "description": "传说中海神波塞冬使用过的鱼竿，全属性最佳",
+        "category": "rod",
+        "sort_order": 106,
+        "stock_total": 20,
+        "per_user_limit": 1,
+        "costs": [("premium", 900, None)],
+        "rewards": [("rod", 5, 1, 1, 0)],
+    },
+    # --- 高级鱼饵：星石定价对应「稀有鱼收益提升」 ---
+    {
+        "shop_id": 2,
+        "name": "丰饶号角粉末",
+        "description": "下一次钓鱼必定获得双倍数量——全局唯一的翻倍来源，仅能用星石购买。限购 5 个",
+        "category": "bait",
+        "sort_order": 206,
+        "per_user_limit": 5,
+        "costs": [("premium", 180, None)],
+        "rewards": [("bait", 14, 1, None, 0)],
+    },
+    # --- 精炼护符：应对毁坏风险，是精炼系统的「保险」 ---
+    {
+        "shop_id": 2,
+        "name": "破厄护符·守",
+        "description": "精炼毁坏时改判为普通失败，本体保留不降级。[仅对5星及以下装备生效]",
+        "category": "item",
+        "sort_order": 301,
+        "costs": [("premium", 300, None)],
+        "rewards": [("item", 11, 1, None, 0)],
+    },
+    {
+        "shop_id": 2,
+        "name": "破厄护符·折",
+        "description": "精炼毁坏时改为降一级并保留本体",
+        "category": "item",
+        "sort_order": 302,
+        "costs": [("premium", 300, None)],
+        "rewards": [("item", 12, 1, None, 0)],
+    },
+    {
+        "shop_id": 2,
+        "name": "天命护符·神佑",
+        "description": "任何失败都改为普通失败，本体保留不降级，对所有星级均有效。限量 30 件",
+        "category": "item",
+        "sort_order": 303,
+        "stock_total": 30,
+        "per_user_limit": 3,
+        "costs": [("premium", 800, None)],
+        "rewards": [("item", 13, 1, None, 0)],
+    },
+    {
+        "shop_id": 2,
+        "name": "远洋补给包",
+        "description": "珍宝阁特供组合，含珍稀鱼饵与幸运药水。限购 5 次",
+        "category": "bundle",
+        "sort_order": 401,
+        "per_user_limit": 5,
+        "costs": [("premium", 250, None)],
+        "rewards": [
+            ("bait", 9, 3, None, 0),
+            ("bait", 10, 3, None, 0),
+            ("item", 2, 1, None, 0),
+        ],
+    },
+    # --- 区域通行证：进入需通行证区域时自动消耗 ---
+    # 定价依据：区域3 的 5 倍钓鱼费用（110×5≈550）再留一点溢价，
+    # 让「自由进出传说之海」成为长期玩家的目标，而非随手可买。
+    {
+        "shop_id": 2,
+        "name": "前往神秘海域的通行证",
+        "description": "进入特定钓鱼区域时自动消耗。限购 10 张",
+        "category": "item",
+        "sort_order": 304,
+        "per_user_limit": 10,
+        "costs": [("premium", 500, None)],
+        "rewards": [("item", 5, 1, None, 0)],
+    },
+
+    # ==================== 商店3：黑潮交易所（金币 · 钱袋兑换，每日限购）====================
+    # 定位：给不想刷鱼、想稳定拿金币的玩家一个确定出口。
+    # 定价锚点：购买成本 ≈ 4~6 次对应区域钓鱼的期望收益（区域1≈39 / 区域3≈960）。
+    # 所有商品设每日限购，保证它不会替代钓鱼（否则会击穿区域配额与税收调控）。
+    {
+        "shop_id": 3,
+        "name": "小钱袋",
+        "description": "一个装有少量金币的袋子。面值 1000",
+        "category": "money",
+        "sort_order": 101,
+        "per_user_daily_limit": 5,
+        # 成本 5000 ≈ 区域2 的 28 次收益，远高于面值，避免无脑刷
+        "costs": [("coins", 5000, None)],
+        "rewards": [("item", 1, 1, None, 0)],
+    },
+    {
+        "shop_id": 3,
+        "name": "中号钱袋",
+        "description": "一个沉甸甸的钱袋。面值 10000",
+        "category": "money",
+        "sort_order": 102,
+        "per_user_daily_limit": 3,
+        "costs": [("coins", 40000, None)],
+        "rewards": [("item", 7, 1, None, 0)],
+    },
+    {
+        "shop_id": 3,
+        "name": "神秘钱袋",
+        "description": "会变换重量的神秘钱袋，随机获得 5000~20000 金币",
+        "category": "money",
+        "sort_order": 103,
+        "per_user_daily_limit": 3,
+        "costs": [("coins", 60000, None)],
+        "rewards": [("item", 9, 1, None, 0)],
+    },
+    {
+        "shop_id": 3,
+        "name": "大号钱袋",
+        "description": "一个鼓鼓囊囊的大钱袋。面值 50000",
+        "category": "money",
+        "sort_order": 104,
+        "per_user_daily_limit": 2,
+        "costs": [("coins", 180000, None)],
+        "rewards": [("item", 8, 1, None, 0)],
+    },
+    {
+        "shop_id": 3,
+        "name": "巨型钱袋",
+        "description": "仿佛装满了全世界财富的巨大袋子，随机获得 10万~50万 金币",
+        "category": "money",
+        "sort_order": 105,
+        "stock_total": 100,
+        "per_user_daily_limit": 1,
+        "costs": [("coins", 1200000, None)],
+        "rewards": [("item", 10, 1, None, 0)],
+    },
+    # 兑换礼包：给愿意花大钱的玩家一个打包价
+    {
+        "shop_id": 3,
+        "name": "囤货箱",
+        "description": "一次性购入多只钱袋，适合中后期囤积金币。限购 2 次",
+        "category": "money",
+        "sort_order": 201,
+        "per_user_limit": 2,
+        "per_user_daily_limit": 2,
+        "costs": [("coins", 1500000, None)],
+        "rewards": [
+            ("item", 8, 2, None, 0),
+            ("item", 9, 2, None, 0),
+        ],
+    },
+
+    # ==================== 商店4：幽灵船黑市（偷鱼对抗道具，每日 21:00~04:00）====================
+    # 定位：社交博弈。这些道具只在特定时段有售，制造「深夜黑市」的氛围与稀缺感。
+    {
+        "shop_id": 4,
+        "name": "守护海灵（黑市）",
+        "description": "更长效的守护，8 小时内鱼塘不会被偷窃。限量 15 件",
+        "category": "social",
+        "sort_order": 101,
+        "stock_total": 15,
+        "per_user_limit": 2,
+        "costs": [("coins", 12000, None)],
+        "rewards": [("item", 14, 2, None, 0)],
+    },
+    {
+        "shop_id": 4,
+        "name": "暗影斗篷",
+        "description": "获得无视海灵守护的能力，穿透一次偷窃。用后即消",
+        "category": "social",
+        "sort_order": 102,
+        "costs": [("coins", 15000, None)],
+        "rewards": [("item", 18, 1, None, 0)],
+    },
+    {
+        "shop_id": 4,
+        "name": "破灵符",
+        "description": "1 小时内可以穿透海灵守护进行偷窃",
+        "category": "social",
+        "sort_order": 103,
+        "costs": [("coins", 25000, None)],
+        "rewards": [("item", 16, 1, None, 0)],
+    },
+    {
+        "shop_id": 4,
+        "name": "侠盗的符文",
+        "description": "立即重置偷鱼冷却，让你再抓一次机会",
+        "category": "social",
+        "sort_order": 104,
+        "costs": [("coins", 8000, None)],
+        "rewards": [("item", 4, 1, None, 0)],
+    },
+    # 反制道具：贵但稀有，形成「攻防博弈」的闭环
+    {
+        "shop_id": 4,
+        "name": "驱灵香",
+        "description": "驱散目标玩家的守护之力。限量 10 件",
+        "category": "social",
+        "sort_order": 201,
+        "stock_total": 10,
+        "per_user_limit": 2,
+        "costs": [("coins", 60000, None)],
+        "rewards": [("item", 17, 1, None, 0)],
+    },
+    {
+        "shop_id": 4,
+        "name": "时运沙漏（黑市）",
+        "description": "窥见擦弹运势的神器，库存有限。限量 8 件",
+        "category": "social",
+        "sort_order": 202,
+        "stock_total": 8,
+        "per_user_limit": 1,
+        "costs": [("coins", 80000, None)],
+        "rewards": [("item", 15, 1, None, 0)],
+    },
+    # 标本陈列：给收集党一个炫耀向的消费出口
+    {
+        "shop_id": 4,
+        "name": "深海标本·锦鲤",
+        "description": "以稀有鱼类标本出售，直接放入水族箱陈列。限量 5 件",
+        "category": "collectible",
+        "sort_order": 301,
+        "stock_total": 5,
+        "per_user_limit": 1,
+        "costs": [("coins", 50000, None)],
+        "rewards": [("fish", 87, 1, None, 1)],  # fish_id 87 = 锦鲤（高品质）
+    },
+    {
+        "shop_id": 4,
+        "name": "深海标本·腔棘鱼",
+        "description": "被称为活化石的古老鱼类，黑市收藏家的最爱。限量 3 件",
+        "category": "collectible",
+        "sort_order": 302,
+        "stock_total": 3,
+        "per_user_limit": 1,
+        "costs": [("coins", 200000, None)],
+        "rewards": [("fish", 77, 1, None, 1)],  # fish_id 77 = 腔棘鱼（高品质）
+    },
+    # 双成本 + 双奖励示例：展示 AND/OR 成本组能力
+    {
+        "shop_id": 4,
+        "name": "幽灵船馈赠",
+        "description": "用稀有鱼换取黑市珍藏，需同时支付金币与一条高级鱼（旗鱼或锦鲤二选一）",
+        "category": "special",
+        "sort_order": 401,
+        "stock_total": 8,
+        "per_user_limit": 2,
+        # group 0：金币（必需）；group 1：二选一的鱼类（OR 关系）
+        "costs": [
+            ("coins", 30000, None, "and", 0),
+            ("fish", 1, 86, "or", 1),  # 旗鱼
+            ("fish", 1, 87, "or", 1),  # 锦鲤
+        ],
+        "rewards": [("rod", 5, 1, 3, 0)],
+    },
+    # --- 无尽深渊专属（区域4，需通行证）---
+    # 定价锚点：区域4 费用 500 金币/次，故补给品定价对齐「数次的深渊收益」。
+    {
+        "shop_id": 4,
+        "name": "深渊补给包",
+        "description": "为探索无尽深渊准备的补给：高效鱼饵 + 通行证。限购 3 次",
+        "category": "abyss",
+        "sort_order": 501,
+        "stock_total": 30,
+        "per_user_limit": 3,
+        "costs": [("coins", 60000, None)],
+        "rewards": [
+            ("item", 5, 1, None, 0),  # 前往神秘海域的通行证
+            ("bait", 10, 3, None, 0),  # 秘制香饵
+            ("bait", 11, 3, None, 0),  # 价值连城饵
+        ],
+    },
+    {
+        "shop_id": 4,
+        "name": "深渊通行证兑换",
+        "description": "单独兑换一张通行证，供下次进入无尽深渊。限购 20 张",
+        "category": "abyss",
+        "sort_order": 502,
+        "per_user_limit": 20,
+        "costs": [("coins", 30000, None)],
+        "rewards": [("item", 5, 1, None, 0)],
+    },
+    {
+        "shop_id": 4,
+        "name": "深渊标本·龙王",
+        "description": "深渊之主的投影，作为标本收入水族箱。限量 1 件",
+        "category": "collectible",
+        "sort_order": 303,
+        "stock_total": 1,
+        "per_user_limit": 1,
+        "costs": [("coins", 800000, None)],
+        "rewards": [("fish", 88, 1, None, 1)],  # fish_id 88 = 龙王（5星）
+    },
+]
+
+# ==========================================================
+# 卡池物品种子数据
+# ==========================================================
+# 结构：{pool_id, items: [(item_type, item_id, quantity, weight), ...]}
+# 说明：item_type 与 gacha_service 保持一致 —— rod / accessory / bait / item / coins / titles
+GACHA_POOL_ITEMS = {
+    1: [
+        ("rod", 4, 1, 10),# 星辰钓者
+        ("rod", 5, 1, 3),      # 海神之赐
+        ("rod", 3, 1, 30),     # 碳素纤维竿
+        ("coins", 0, 10000, 57),
+    ],
+    2: [
+        ("accessory", 4, 1, 5),  # 海洋之心
+        ("accessory", 3, 1, 15), # 丰收号角
+        ("coins", 0, 20000, 80),
+    ],
+    # 每日补给池：每日免费可抽一次，是普通玩家获取道具的主途径。
+    # 设计原则：以「消耗品 + 小钱袋」为主，不放任何装备，避免免费池稀释付费池的价值。
+    3: [
+        ("item", 1, 2, 34),    # 小钱袋 x2  —— 最常见的免费金币来源
+        ("bait", 1, 5, 26),     # 普通蚯蚓 x5
+        ("bait", 2, 5, 18),     # 面包团 x5
+        ("bait", 4, 3, 8),      # 红虫 x3
+        ("item", 3, 1, 6),      # 便携式声呐 —— 跳过冷却，实用
+        ("item", 6, 1, 5),      # 擦弹许可证
+        ("coins", 0, 2000, 3),
+    ],
+}

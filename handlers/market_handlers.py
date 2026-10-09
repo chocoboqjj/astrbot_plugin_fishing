@@ -1,3 +1,4 @@
+from astrbot.api import logger
 from astrbot.api.event import filter, AstrMessageEvent
 from ..utils import format_rarity_display, parse_target_user_id, parse_amount
 from typing import TYPE_CHECKING
@@ -168,9 +169,13 @@ async def shop(plugin: "FishingPlugin", event: AstrMessageEvent):
     msg += "\n🛍️ 【在售商品】\n"
     msg += "═" * 50 + "\n"
     for i, e in enumerate(items):
-        item = e["item"]
-        costs = e["costs"]
-        rewards = e.get("rewards", [])
+        item = e.get("item")
+        if not item:
+            # 防御性跳过异常条目，避免单个脏数据导致整个商店指令报错
+            logger.warning(f"[SHOP] 跳过异常的商店条目(idx={i}): {e!r}")
+            continue
+        costs = e.get("costs") or []
+        rewards = e.get("rewards") or []
 
         # 获取商品稀有度和emoji
         rarity = 1
@@ -439,9 +444,15 @@ async def shop(plugin: "FishingPlugin", event: AstrMessageEvent):
         if time_info:
             msg += f"├─ 限时: {' | '.join(time_info)}\n"
 
-        # 如果包含多个物品（≥2），显示礼包包含的物品
-        if len(rewards) >= 2:
-            msg += "├─ 包含物品:\n"
+        # 显示奖励明细。
+        # 原实现只在 len(rewards) >= 2 时展示，导致 44 件单品商品
+        # 玩家只能看到标题行的图标，看不到具体是什么、数量多少。
+        # 现在统一展示：单品用单行，礼包用多行。
+        if rewards:
+            if len(rewards) >= 2:
+                msg += "├─ 包含物品:\n"
+            else:
+                msg += "├─ 获得物品:\n"
             for reward in rewards:
                 item_name = "未知物品"
                 item_emoji = "📦"

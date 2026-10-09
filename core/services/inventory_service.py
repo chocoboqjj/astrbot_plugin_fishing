@@ -900,12 +900,16 @@ class InventoryService:
         if not user:
             return {"success": False, "message": "用户不存在"}
 
-        # 精炼费用表 (1-10级)
-        refine_costs = {
-            1: 10000, 2: 30000, 3: 50000, 4: 100000,
-            5: 200000, 6: 500000, 7: 1000000, 8: 2000000,
-            9: 5000000, 10: 10000000
-        }
+        # 精炼费用表与等级上限由配置驱动（core/config_defaults.py -> DEFAULT_REFINE_CONFIG）
+        refine_cfg = self.config.get("refine", {}) if isinstance(self.config, dict) else {}
+        refine_costs = {int(k): v for k, v in (refine_cfg.get("costs") or {}).items()}
+        if not refine_costs:
+            refine_costs = {
+                1: 10000, 2: 30000, 3: 50000, 4: 100000,
+                5: 200000, 6: 500000, 7: 1000000, 8: 2000000,
+                9: 5000000, 10: 10000000
+            }
+        refine_max_level = refine_cfg.get("max_level", 10)
 
         # 根据物品类型设置相关配置
         if item_type not in ["rod", "accessory"]:
@@ -922,8 +926,8 @@ class InventoryService:
         id_field = config["id_field"]
 
         # 检查精炼等级
-        if instance.refine_level >= 10:
-            return {"success": False, "message": "已达到最高精炼等级"}
+        if instance.refine_level >= refine_max_level:
+            return {"success": False, "message": f"已达到最高精炼等级({refine_max_level})"}
 
         # 获取装备稀有度
         rarity = template.rarity if hasattr(template, 'rarity') else 5
@@ -1017,61 +1021,47 @@ class InventoryService:
         Returns:
             tuple: (调整后的费用表, 成功率表)
         """
-        # 1-4星装备：逐级递减成功率，让高等级精炼有挑战性
-        if rarity <= 4:
-            # 费用大幅减少，让低星装备精炼更便宜
-            cost_multiplier = 0.1 + (rarity - 1) * 0.05  # 1星10%, 2星15%, 3星20%, 4星25%
-            adjusted_costs = {level: int(cost * cost_multiplier) for level, cost in base_costs.items()}
-            
-            # 重新设计成功率：低等级高成功率，高等级逐渐降低
-            if rarity <= 2:  # 1-2星：保持较高成功率
-                success_rates = {
-                    1: 0.95, 2: 0.95, 3: 0.90, 4: 0.90,
-                    5: 0.85, 6: 0.80, 7: 0.75, 8: 0.70,
-                    9: 0.60, 10: 0.50
-                }
-            elif rarity == 3:  # 3星：中等成功率
-                success_rates = {
-                    1: 0.90, 2: 0.90, 3: 0.85, 4: 0.85,
-                    5: 0.80, 6: 0.75, 7: 0.65, 8: 0.55,
-                    9: 0.45, 10: 0.35
-                }
-            else:  # 4星：更有挑战性
-                success_rates = {
-                    1: 0.85, 2: 0.85, 3: 0.80, 4: 0.80,
-                    5: 0.75, 6: 0.70, 7: 0.60, 8: 0.50,
-                    9: 0.40, 10: 0.30
-                }
-            
-        # 5-6星装备：中等费用；成功率按设计在6级附近≈50%，越往后越难
-        elif rarity <= 6:
-            # 费用适中
-            cost_multiplier = 0.5 + (rarity - 5) * 0.2  # 5星50%, 6星70%
-            adjusted_costs = {level: int(cost * cost_multiplier) for level, cost in base_costs.items()}
+        # 费用系数与成功率均由配置驱动（refine.cost_multipliers / refine.success_rates）
+        refine_cfg = self.config.get("refine", {}) if isinstance(self.config, dict) else {}
+        multipliers_cfg = refine_cfg.get("cost_multipliers") or {}
+        rates_cfg = refine_cfg.get("success_rates") or {}
 
-            # 区分5星与6星的成功率曲线
-            if rarity == 5:
-                success_rates = {
-                    1: 0.85, 2: 0.85, 3: 0.80, 4: 0.75,
-                    5: 0.65, 6: 0.50, 7: 0.40, 8: 0.35,
-                    9: 0.30, 10: 0.25
-                }
-            else:  # rarity == 6
-                success_rates = {
-                    1: 0.80, 2: 0.80, 3: 0.75, 4: 0.70,
-                    5: 0.60, 6: 0.45, 7: 0.35, 8: 0.30,
-                    9: 0.25, 10: 0.20
-                }
-            
-        # 7星及以上装备：保持挑战性
+        def _pick_rates(tier_keys):
+            """按优先级从配置中取第一档匹配的稀有度档位"""
+            for key in tier_keys:
+                if key in rates_cfg and isinstance(rates_cfg[key], (list, tuple)) and rates_cfg[key]:
+                    return list(rates_cfg[key])
+            # 配置缺失时回退到最保守的一档
+            fallback = rates_cfg.get("7+") or [0.8, 0.8, 0.8, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2]
+            return list(fallback)
+
+        def _rarity_tier(rarity: int) -> str:
+            """把稀有度映射到费用系数的档位键"""
+            if rarity <= 2:
+                return "1-2"
+            if rarity <= 6:
+                return str(rarity)
+            return "7+"
+
+        # 费用系数按稀有度细分，保证总费用随星级单调递增
+        cost_multiplier = multipliers_cfg.get(
+            _rarity_tier(rarity), multipliers_cfg.get("7+", 1.0)
+        )
+        adjusted_costs = {level: max(int(cost * cost_multiplier), 1) for level, cost in base_costs.items()}
+
+        if rarity <= 2:
+            success_rates = _pick_rates(["1-2", "3", "4", "5", "6", "7+"])
+        elif rarity == 3:
+            success_rates = _pick_rates(["3", "1-2", "4", "5", "6", "7+"])
+        elif rarity == 4:
+            success_rates = _pick_rates(["4", "3", "5", "6", "7+"])
+        elif rarity == 5:
+            success_rates = _pick_rates(["5", "6", "4", "7+"])
+        elif rarity == 6:
+            success_rates = _pick_rates(["6", "5", "7+"])
         else:
-            adjusted_costs = base_costs.copy()
-            success_rates = {
-                1: 0.8, 2: 0.8, 3: 0.8, 4: 0.8,
-                5: 0.7, 6: 0.6, 7: 0.5, 8: 0.4,
-                9: 0.3, 10: 0.2
-            }
-        
+            success_rates = _pick_rates(["7+"])
+
         return adjusted_costs, success_rates
 
     def _determine_failure_type(self, instance, template) -> str:
@@ -1091,20 +1081,30 @@ class InventoryService:
         rarity = template.rarity if template and hasattr(template, 'rarity') else 5
         refine_level = instance.refine_level
         
-        # 基础概率设置
-        downgrade_chance = 0.10  # 固定10%概率降级
+        # 基础概率设置（可配置）
+        refine_cfg = self.config.get("refine", {}) if isinstance(self.config, dict) else {}
+        downgrade_chance = refine_cfg.get("downgrade_chance", 0.10)
         destruction_chance = 0.0
-            
-        # 根据稀有度调整毁坏概率
-        if refine_level >= 5:
+
+        # 毁坏概率：仅在精炼等级达到阈值后生效，数值按稀有度分档
+        dest_cfg = refine_cfg.get("destruction_chances") or {}
+        min_level = refine_cfg.get("min_level_for_destruction", 5)
+        if refine_level >= min_level:
             if rarity <= 2:
-                destruction_chance = 0.30  # 10% + 20% = 30%
+                destruction_chance = dest_cfg.get("1-2", 0.30)
             elif rarity <= 4:
-                destruction_chance = 0.35  # 15% + 20% = 35%
+                destruction_chance = dest_cfg.get("3-4", 0.35)
             elif rarity <= 6:
-                destruction_chance = 0.40  # 20% + 20% = 40%
+                destruction_chance = dest_cfg.get("5-6", 0.40)
             else:
-                destruction_chance = 0.50  # 30% + 20% = 50%
+                destruction_chance = dest_cfg.get("7+", 0.50)
+
+        # 两类概率之和不应超过 100%，否则不会出现「普通失败」
+        total = destruction_chance + downgrade_chance
+        if total > 1.0:
+            scale = 1.0 / total
+            destruction_chance *= scale
+            downgrade_chance *= scale
                 
         # 随机决定失败类型
         rand = random.random()
@@ -1565,7 +1565,18 @@ class InventoryService:
         if not item_template:
             return {"success": False, "message": "道具信息不存在"}
 
+        # 优先处理「需要指定目标」的道具（如驱灵香）。
+        # 这类道具 is_consumable=False，但玩家仍可能误用 /使用，
+        # 因此在「非消耗品直接拒绝」之前，先让 effect 处理器给出准确指引。
+        effect_type_preview = getattr(item_template, "effect_type", None)
         if not getattr(item_template, "is_consumable", False):
+            if effect_type_preview:
+                preview_handler = self.effect_manager.get_effect(effect_type_preview)
+                if preview_handler:
+                    preview = preview_handler.apply(user, item_template, {}, quantity=quantity)
+                    # 若处理器明确返回了失败原因（如需要目标），直接透传该提示
+                    if not preview.get("success", False) and preview.get("message"):
+                        return preview
             return {"success": False, "message": f"【{item_template.name}】无法直接使用。"}
 
         effect_type = item_template.effect_type

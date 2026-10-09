@@ -174,6 +174,11 @@ class ShopService:
         shop_error = self._check_shop_availability(shop)
         if shop_error:
             return {"success": False, "message": shop_error}
+
+        # 校验奖励配置：无奖励的商品禁止购买，避免出现「扣钱但不发货」
+        rewards = self.shop_repo.get_item_rewards(item_id) or []
+        if not rewards:
+            return {"success": False, "message": "该商品奖励配置异常（未配置奖励），请联系管理员"}
         
         # 获取用户信息
         user = self.user_repo.get_by_id(user_id)
@@ -213,7 +218,7 @@ class ShopService:
         # --- 核心购买逻辑重构 ---
         
         # 1. 解析成本结构
-        costs_db = self.shop_repo.get_item_costs(item_id)
+        costs_db = self.shop_repo.get_item_costs(item_id) or []
         cost_structure = self._get_cost_structure(costs_db, quantity)
         and_costs = cost_structure["and_costs"]
         or_choices = cost_structure["or_choices"]
@@ -246,7 +251,6 @@ class ShopService:
         
         # 6. 执行真实的交易
         self._deduct_costs(user, final_total_costs)
-        rewards = self.shop_repo.get_item_rewards(item_id)
         obtained_items = self._give_rewards(user_id, rewards, quantity)
         
         self.shop_repo.increase_item_sold(item_id, quantity)

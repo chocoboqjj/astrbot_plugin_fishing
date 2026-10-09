@@ -1,5 +1,6 @@
 import pkgutil
 import importlib
+import types
 from typing import Dict, Optional
 
 from .item_effects.abstract_effect import AbstractItemEffect
@@ -17,18 +18,28 @@ class EffectManager:
     def discover_and_register(
         self,
         effects_package_path: str,
-        dependencies: Dict[str, any]
+        dependencies: Dict[str, any],
+        package: Optional[types.ModuleType] = None,
     ):
         """
         自动发现并注册指定包路径下的所有效果处理器。
+
+        :param effects_package_path: 用于日志展示的路径标识。
+        :param dependencies: 要注入到每个效果类的依赖。
+        :param package: 已导入的效果包对象。传入可避免调用方拼出错误的模块路径字符串。
         """
         logger.info(f"正在从 '{effects_package_path}' 自动发现道具效果...")
 
-        package = importlib.import_module(effects_package_path)
+        try:
+            if package is None:
+                package = importlib.import_module(effects_package_path)
+        except Exception as e:
+            logger.error(f"无法导入道具效果包 '{effects_package_path}': {e}", exc_info=True)
+            return
 
         for _, name, _ in pkgutil.iter_modules(package.__path__):
             try:
-                module = importlib.import_module(f"{effects_package_path}.{name}")
+                module = importlib.import_module(f"{package.__name__}.{name}")
                 for attribute_name in dir(module):
                     attribute = getattr(module, attribute_name)
                     if (

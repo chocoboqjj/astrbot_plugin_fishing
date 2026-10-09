@@ -33,11 +33,13 @@ from .core.services.achievement_service import AchievementService
 from .core.services.game_mechanics_service import GameMechanicsService
 from .core.services.effect_manager import EffectManager
 from .core.services.fishing_zone_service import FishingZoneService
+from .core.services import item_effects
 from .core.services.exchange_service import ExchangeService # 新增交易所Service
 from .core.services.sicbo_service import SicboService # 新增骰宝Service
 from .core.services.red_packet_service import RedPacketService # 新增红包Service
 
 from .core.database.migration import run_migrations
+from .core.config_defaults import build_game_config
 
 # ==========================================================
 # 导入所有指令函数
@@ -64,10 +66,11 @@ class FishingPlugin(Star):
         super().__init__(context)
 
         # --- 1. 加载配置 ---
-        # 从新的嵌套结构中读取配置
-        tax_config = config.get("tax", {})
+        # 税收开关直接决定是否启动税收后台线程，这里先取原始值；
+        # game_config 组装完成后（见下方 1.2）会再对齐一次，确保与 Service 读到的是同一份配置。
+        tax_config = config.get("tax", {}) if isinstance(config, dict) else {}
         self.is_tax = tax_config.get("is_tax", True)  # 是否开启税收
-        self.threshold = tax_config.get("threshold", 100000)  # 起征点
+        self.threshold = tax_config.get("threshold", 1000000)  # 起征点
         self.step_coins = tax_config.get("step_coins", 100000)
         self.step_rate = tax_config.get("step_rate", 0.01)
         self.max_rate = tax_config.get("max_rate", 0.2)  # 最大税率
@@ -93,116 +96,24 @@ class FishingPlugin(Star):
         db_path = os.path.join(self.data_dir, "fish.db")
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         
-        # --- 1.2. 配置数据完整性检查注释 ---
-        # 以下配置项必须在此处从 AstrBotConfig 中提取并放入 game_config，
-        # 以确保所有服务在接收 game_config 时能够正确读取配置值
-        # 
-        # 配置数据流：_conf_schema.json → AstrBotConfig (config) → game_config → 各个服务
-        # 
-        # 从框架读取嵌套配置
-        # 注意：框架会自动解析 _conf_schema.json 中的嵌套对象
-        fishing_config = config.get("fishing", {})
-        steal_config = config.get("steal", {})
-        electric_fish_config = config.get("electric_fish", {})
-        game_global_config = config.get("game", {})
-        user_config = config.get("user", {})
-        market_config = config.get("market", {})
-        sell_prices_config = config.get("sell_prices", {})
-        
-        # 直接从框架获取 exchange 配置（不重建）
-        exchange_config = config.get("exchange", {})
-        if not exchange_config:
-            # 如果框架返回空字典，说明嵌套配置不被支持，手动构建默认值
-            logger.warning("[CONFIG] Exchange config is empty, using defaults")
-            exchange_config = {
-                "account_fee": 100000,
-                "capacity": 1000,
-                "tax_rate": 0.05,
-                "volatility": {"dried_fish": 0.08, "fish_roe": 0.12, "fish_oil": 0.10},
-                "event_chance": 0.1,
-                "max_change_rate": 0.2,
-                "min_price": 1,
-                "max_price": 1000000,
-                "sentiment_weights": {"panic": 0.1, "pessimistic": 0.2, "neutral": 0.4, "optimistic": 0.2, "euphoric": 0.1},
-                "merge_window_minutes": 30,
-                "initial_prices": {"dried_fish": 6000, "fish_roe": 12000, "fish_oil": 10000}
-            }
-        else:
-            logger.info(f"[CONFIG] Exchange capacity loaded: {exchange_config.get('capacity', 'NOT SET')}")
-        
-        self.game_config = {
-            "fishing": {
-                "cost": config.get("fish_cost", 10), 
-                "cooldown_seconds": fishing_config.get("cooldown_seconds", 180)
-            },
-            "quality_bonus_max_chance": fishing_config.get("quality_bonus_max_chance", 0.35),
-            "steal": {
-                "cooldown_seconds": steal_config.get("cooldown_seconds", 14400)
-            },
-            "electric_fish": {
-                "enabled": electric_fish_config.get("enabled", True),
-                "cooldown_seconds": electric_fish_config.get("cooldown_seconds", 7200),
-                "base_success_rate": electric_fish_config.get("base_success_rate", 0.6),
-                "failure_penalty_max_rate": electric_fish_config.get("failure_penalty_max_rate", 0.5)
-            },
-            "wipe_bomb": {
-                "max_attempts_per_day": game_global_config.get("wipe_bomb_attempts", 3)
-            },
-            "wheel_of_fate_daily_limit": game_global_config.get("wheel_of_fate_daily_limit", 3),
-            "daily_reset_hour": game_global_config.get("daily_reset_hour", 0),
-            "user": {
-                "initial_coins": user_config.get("initial_coins", 200)
-            },
-            "market": {
-                "listing_tax_rate": market_config.get("listing_tax_rate", 0.05)
-            },
-            "tax": {
-                "is_tax": self.is_tax,
-                "threshold": self.threshold,
-                "step_coins": self.step_coins,
-                "step_rate": self.step_rate,
-                "min_rate": self.min_rate,
-                "max_rate": self.max_rate
-            },
-            "pond_upgrades": [
-                { "from": 480, "to": 999, "cost": 50000 },
-                { "from": 999, "to": 9999, "cost": 500000 },
-                { "from": 9999, "to": 99999, "cost": 50000000 },
-                { "from": 99999, "to": 999999, "cost": 5000000000 },
-            ],
-            "sell_prices": {
-                "rod": { 
-                    "1": sell_prices_config.get("by_rarity_1", 100),
-                    "2": sell_prices_config.get("by_rarity_2", 500),
-                    "3": sell_prices_config.get("by_rarity_3", 2000),
-                    "4": sell_prices_config.get("by_rarity_4", 5000),
-                    "5": sell_prices_config.get("by_rarity_5", 10000),
-                    "6": sell_prices_config.get("by_rarity_6", 20000),
-                    "7": sell_prices_config.get("by_rarity_7", 50000),
-                    "8": sell_prices_config.get("by_rarity_8", 100000),
-                    "9": sell_prices_config.get("by_rarity_9", 200000),
-                    "10": sell_prices_config.get("by_rarity_10", 500000)
-                },
-                "accessory": { 
-                    "1": sell_prices_config.get("by_rarity_1", 100),
-                    "2": sell_prices_config.get("by_rarity_2", 500),
-                    "3": sell_prices_config.get("by_rarity_3", 2000),
-                    "4": sell_prices_config.get("by_rarity_4", 5000),
-                    "5": sell_prices_config.get("by_rarity_5", 10000),
-                    "6": sell_prices_config.get("by_rarity_6", 20000),
-                    "7": sell_prices_config.get("by_rarity_7", 50000),
-                    "8": sell_prices_config.get("by_rarity_8", 100000),
-                    "9": sell_prices_config.get("by_rarity_9", 200000),
-                    "10": sell_prices_config.get("by_rarity_10", 500000)
-                },
-                "refine_multiplier": {
-                    "1": 1.0, "2": 1.6, "3": 3.0, "4": 6.0, "5": 12.0,
-                    "6": 25.0, "7": 55.0, "8": 125.0, "9": 280.0, "10": 660.0
-                }
-            },
-            "exchange": exchange_config  # 直接使用框架的配置
-        }
-        
+        # --- 1.2. 组装 game_config ---
+        # 配置数据流：_conf_schema.json → AstrBotConfig (config) → game_config →各个 Service
+        #
+        # build_game_config 负责三件事：
+        #   1) 为后台未下发的配置项补齐默认值（单一事实来源见 core/config_defaults.py）；
+        #   2) 对数值型配置做类型与区间修正，避免非法值（如负数冷却、税率>1）；
+        #   3) 对结构型配置（鱼塘升级阶梯 / 精炼倍率 / 命运之轮关卡）做合法性校验。
+        self.game_config = build_game_config(config)
+
+        # 税收相关字段以 game_config 为准，避免 Plugin 属性与 Service 各读一份导致不一致
+        tax_game_config = self.game_config.get("tax", {})
+        self.is_tax = tax_game_config.get("is_tax", True)
+        self.threshold = tax_game_config.get("threshold", 1000000)
+        self.step_coins = tax_game_config.get("step_coins", 100000)
+        self.step_rate = tax_game_config.get("step_rate", 0.01)
+        self.max_rate = tax_game_config.get("max_rate", 0.2)
+        self.min_rate = tax_game_config.get("min_rate", 0.001)
+
         # 初始化数据库模式
         plugin_root_dir = os.path.dirname(__file__)
         migrations_path = os.path.join(plugin_root_dir, "core", "database", "migrations")
@@ -244,7 +155,7 @@ class FishingPlugin(Star):
         self.market_service = MarketService(self.market_repo, self.inventory_repo, self.user_repo, self.log_repo,
                                            self.item_template_repo, self.exchange_repo, self.game_config)
         self.achievement_service = AchievementService(self.achievement_repo, self.user_repo, self.inventory_repo,
-                                                     self.item_template_repo, self.log_repo)
+                                                     self.item_template_repo, self.log_repo, self.game_config)
         self.fishing_service = FishingService(
             self.user_repo,
             self.inventory_repo,
@@ -286,7 +197,8 @@ class FishingPlugin(Star):
         # 3.2 实例化效果管理器并自动注册所有效果（需要在fishing_service之后）
         self.effect_manager = EffectManager()
         self.effect_manager.discover_and_register(
-            effects_package_path="data.plugins.astrbot_plugin_fishing.core.services.item_effects",
+            effects_package_path="core.services.item_effects",
+            package=item_effects,
             dependencies={
                 "user_repo": self.user_repo, 
                 "buff_repo": self.buff_repo,

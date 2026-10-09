@@ -203,9 +203,10 @@ class GameMechanicsService:
         # 获取真实的运势等级
         real_tier_key = self._get_fortune_tier_for_multiplier(simulated_multiplier)
         
-        # 削弱机制：33.3%准确率 + 33.3%占卜失败
-        prediction_accuracy = 0.333  # 33.3%准确率
-        divination_failure_rate = 0.333  # 33.3%占卜失败率
+        # 削弱机制：默认 33.3% 准确率 + 33.3% 占卜失败（可通过配置覆盖）
+        wipe_bomb_cfg = self.config.get("wipe_bomb", {}) if isinstance(self.config, dict) else {}
+        prediction_accuracy = wipe_bomb_cfg.get("prediction_accuracy", 0.333)
+        divination_failure_rate = wipe_bomb_cfg.get("divination_failure_rate", 0.333)
         random_value = random.random()
         
         if random_value < divination_failure_rate:
@@ -368,9 +369,10 @@ class GameMechanicsService:
         reward_amount = int(contribution_amount * reward_multiplier)
         profit = reward_amount - contribution_amount
 
-        # 检查是否触发服务器级别抑制（开出≥15x高倍率）
+        # 检查是否触发服务器级别抑制（默认 ≥15x 高倍率，可通过配置调整）
         suppression_triggered = False
-        if reward_multiplier >= 15.0 and not suppressed:
+        suppression_threshold = wipe_bomb_config.get("suppression_threshold", 15.0)
+        if reward_multiplier >= suppression_threshold and not suppressed:
             self._trigger_server_suppression()
             suppression_triggered = True
 

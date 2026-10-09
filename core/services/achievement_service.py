@@ -27,13 +27,17 @@ class AchievementService:
         user_repo: AbstractUserRepository,
         inventory_repo: AbstractInventoryRepository,
         item_template_repo: AbstractItemTemplateRepository,
-        log_repo: AbstractLogRepository
+        log_repo: AbstractLogRepository,
+        config: Optional[Dict[str, Any]] = None,
     ):
         self.achievement_repo = achievement_repo
         self.user_repo = user_repo
         self.inventory_repo = inventory_repo
         self.item_template_repo = item_template_repo
         self.log_repo = log_repo
+        # 检查间隔可由 game.achievement_check_interval 配置（默认 600 秒）
+        game_cfg = config.get("game", {}) if isinstance(config, dict) else {}
+        self._check_interval = game_cfg.get("achievement_check_interval", 600)
 
         self.achievements: List[BaseAchievement] = self._load_achievements()
 
@@ -211,7 +215,7 @@ class AchievementService:
                 all_user_ids = self.user_repo.get_all_user_ids()
                 for user_id in all_user_ids:
                     self._process_user_achievements(user_id)
-                time.sleep(600) # 10分钟检查一次
+                time.sleep(self._check_interval)  # 默认 10 分钟检查一次
             except Exception as e:
                 logger.error(f"成就检查任务出错: {e}")
                 logger.error("堆栈信息:", exc_info=True)

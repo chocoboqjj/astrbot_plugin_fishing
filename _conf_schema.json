@@ -30,32 +30,40 @@
       "threshold": {
         "description": "税收的起征点",
         "type": "int",
-        "hint": "税收的起征点，低于此值不收税",
-        "default": 1000000
+        "hint": "持有金币低于此值不收税。当前 1000 万，约等于区域4满配 12 天产出，让绝大多数玩家不受影响",
+        "default": 10000000,
+        "min": 0
       },
       "step_coins": {
         "description": "税收的步长",
         "type": "int",
-        "hint": "税收的步长，超过起征点后每增加此值税率增加",
-        "default": 100000
+        "hint": "超过起征点后，每增加此值税率提升一档",
+        "default": 5000000,
+        "min": 1
       },
       "step_rate": {
         "description": "税收的步长税率",
         "type": "float",
-        "hint": "税收的步长税率，超过起征点后每增加step_coins税率增加",
-        "default": 0.01
+        "hint": "每跨过一个步长，税率增加的比例",
+        "default": 0.01,
+        "min": 0.0,
+        "max": 1.0
       },
       "min_rate": {
         "description": "税收的起点税率",
         "type": "float",
-        "hint": "税收的初始税率，达到起征点后开始收税的初始税率",
-        "default": 0.001
+        "hint": "达到起征点时的初始税率",
+        "default": 0.001,
+        "min": 0.0,
+        "max": 1.0
       },
       "max_rate": {
         "description": "税收的最大税率",
         "type": "float",
-        "hint": "税收的最大税率，超过此值不再增加",
-        "default": 0.2
+        "hint": "税率上限，用于通胀回收的最后闸门",
+        "default": 0.1,
+        "min": 0.0,
+        "max": 1.0
       },
       "transfer_tax_rate": {
         "description": "转账手续费率",
@@ -71,19 +79,66 @@
     "description": "钓鱼系统配置",
     "type": "object",
     "items": {
+      "cost": {
+        "description": "钓鱼的默认花费",
+        "type": "int",
+        "hint": "仅作为区域未配置 fishing_cost 时的兜底值；实际钓鱼优先消耗所在钓鱼区域的费用",
+        "default": 10,
+        "min": 0
+      },
       "cooldown_seconds": {
         "description": "钓鱼的冷却时间",
         "type": "int",
         "hint": "每次钓鱼后的冷却时间，单位为秒",
-        "default": 180
+        "default": 180,
+        "min": 0
       },
       "quality_bonus_max_chance": {
         "description": "高品质鱼最大触发概率",
         "type": "float",
-        "hint": "装备品质加成触发高品质鱼的最大概率（0.0-1.0），默认0.35表示35%。使用对数压缩公式处理乘法累积的品质加成，避免概率过高",
+        "hint": "装备品质加成触发高品质鱼的概率上限",
         "default": 0.35,
         "min": 0.0,
         "max": 1.0
+      },
+      "quality_chance_scale": {
+        "description": "高品质概率压缩系数",
+        "type": "float",
+        "hint": "实际概率 = log2(品质倍率) × 本系数，并被上限封顶。调高可让品质加成更强（默认0.5）",
+        "default": 0.5,
+        "min": 0.05,
+        "max": 2.0
+      },
+      "base_success_rate": {
+        "description": "钓鱼基础成功率",
+        "type": "float",
+        "hint": "未受鱼饵等加成影响时的钓鱼成功率（0.0-1.0），默认0.7表示70%",
+        "default": 0.7,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "rare_chance_transfer_factor": {
+        "description": "稀有度权重转移系数",
+        "type": "float",
+        "hint": "加成把低星权重转移到高星时的强度。越大越容易出高星鱼，建议 0.5~2.0",
+        "default": 1.0,
+        "min": 0.0,
+        "max": 10.0
+      },
+      "rare_chance_max_boost": {
+        "description": "稀有鱼加成的最大生效比例",
+        "type": "float",
+        "hint": "所有稀有鱼加成叠加后的封顶值。注意：装备满配稀有可达0.92（鱼竿0.15+饰品0.05+10级精炼0.72），上限不应低于该值，否则精炼9~10级将无收益",
+        "default": 1.0,
+        "min": 0.0,
+        "max": 2.0
+      },
+      "garbage_fish_value_threshold": {
+        "description": "垃圾鱼判定阈值",
+        "type": "int",
+        "hint": "基础价值低于该值的鱼视为垃圾鱼，可被「驱散垃圾饵」等道具修正",
+        "default": 5,
+        "min": 0
       }
     }
   },
@@ -130,6 +185,133 @@
         "default": 0.5,
         "min": 0.0,
         "max": 1.0
+      },
+      "min_pond_count": {
+        "description": "电鱼所需的最低鱼塘数量",
+        "type": "int",
+        "hint": "鱼塘中鱼的总数低于该值时无法使用电鱼",
+        "default": 100,
+        "min": 0
+      }
+    }
+  },
+  "signin": {
+    "description": "签到系统配置",
+    "type": "object",
+    "items": {
+      "min_reward": {
+        "description": "签到基础金币奖励下限",
+        "type": "int",
+        "hint": "每日签到获得金币的随机下限",
+        "default": 100,
+        "min": 0
+      },
+      "max_reward": {
+        "description": "签到基础金币奖励上限",
+        "type": "int",
+        "hint": "每日签到获得金币的随机上限",
+        "default": 300,
+        "min": 0
+      },
+      "premium_reward": {
+        "description": "每日签到获得的高级货币",
+        "type": "int",
+        "hint": "每日签到固定获得的高级货币（星石）数量",
+        "default": 1,
+        "min": 0
+      },
+      "consecutive_bonuses": {
+        "description": "连续签到额外奖励",
+        "type": "object",
+        "hint": "key 为连续签到天数，value 为额外金币。示例：3天奖500，7天奖1500",
+        "default": {
+          "3": 500,
+          "7": 1500,
+          "15": 5000,
+          "30": 15000
+        }
+      }
+    }
+  },
+  "sicbo": {
+    "description": "骰宝（赌场）配置",
+    "type": "object",
+    "items": {
+      "countdown_seconds": {
+        "description": "骰宝下注倒计时",
+        "type": "int",
+        "hint": "开庄后允许下注的时长（秒），超时自动开奖",
+        "default": 60,
+        "min": 5,
+        "max": 600
+      },
+      "min_bet": {
+        "description": "单注最低金币",
+        "type": "int",
+        "hint": "每一注允许的最低下注金额",
+        "default": 100,
+        "min": 1
+      },
+      "max_bet": {
+        "description": "单注最高金币",
+        "type": "int",
+        "hint": "每一注允许的最高下注金额",
+        "default": 1000000,
+        "min": 1
+      },
+      "message_mode": {
+        "description": "骰宝消息模式",
+        "type": "string",
+        "hint": "image = 发送图片消息，text = 发送文本消息",
+        "default": "image"
+      }
+    }
+  },
+  "wipe_bomb": {
+    "description": "擦弹系统配置",
+    "type": "object",
+    "items": {
+      "max_attempts_per_day": {
+        "description": "每日擦弹次数上限",
+        "type": "int",
+        "hint": "每个用户每日可使用擦弹的最大基础次数（可被「擦弹许可证」道具增加）",
+        "default": 3,
+        "min": 0
+      },
+      "prediction_accuracy": {
+        "description": "运势预知准确率",
+        "type": "float",
+        "hint": "「时运沙漏」预知擦弹运势的准确概率",
+        "default": 0.333,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "divination_failure_rate": {
+        "description": "占卜失败率",
+        "type": "float",
+        "hint": "预知时显示「天机不可泄露」的概率",
+        "default": 0.333,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "suppression_threshold": {
+        "description": "服务器抑制触发倍率",
+        "type": "float",
+        "hint": "当擦弹倍率超过该值时，服务器会提升高倍率的权重以回收金币，防止经济失控",
+        "default": 15.0,
+        "min": 1.0
+      }
+    }
+  },
+  "notifications": {
+    "description": "系统通知配置",
+    "type": "object",
+    "items": {
+      "relocation_target": {
+        "description": "系统通知的推送目标",
+        "type": "string",
+        "hint": "group = 推送到群聊，private = 私聊",
+        "default": "group"
       }
     }
   },
@@ -153,7 +335,29 @@
         "description": "擦弹炸弹每日次数",
         "type": "int",
         "hint": "每个用户每天可以使用擦弹炸弹的最大次数",
-        "default": 3
+        "default": 3,
+        "min": 0
+      },
+      "achievement_check_interval": {
+        "description": "成就检查间隔",
+        "type": "int",
+        "hint": "后台检查并发放成就奖励的轮询间隔（秒）",
+        "default": 600,
+        "min": 10
+      },
+      "auto_fishing_interval": {
+        "description": "自动钓鱼轮询间隔",
+        "type": "int",
+        "hint": "自动钓鱼功能的轮询间隔（秒），默认40秒",
+        "default": 40,
+        "min": 1
+      },
+      "daily_tax_interval": {
+        "description": "税收结算检查间隔",
+        "type": "int",
+        "hint": "每日税收后台任务的轮询间隔（秒）",
+        "default": 3600,
+        "min": 60
       }
     }
   },
@@ -165,7 +369,37 @@
         "description": "用户初始金币",
         "type": "int",
         "hint": "新用户注册时的初始金币数量",
-        "default": 200
+        "default": 200,
+        "min": 0
+      },
+      "initial_premium_currency": {
+        "description": "用户初始高级货币",
+        "type": "int",
+        "hint": "新用户注册时的初始高级货币（星石）数量",
+        "default": 0,
+        "min": 0
+      },
+      "default_pond_capacity": {
+        "description": "默认鱼塘容量",
+        "type": "int",
+        "hint": "新用户鱼塘的初始容量",
+        "default": 480,
+        "min": 1
+      },
+      "default_aquarium_capacity": {
+        "description": "默认水族箱容量",
+        "type": "int",
+        "hint": "新用户水族箱的初始容量",
+        "default": 50,
+        "min": 0
+      },
+      "nickname_max_length": {
+        "description": "昵称最大长度",
+        "type": "int",
+        "hint": "玩家可自定义昵称的最大字符数",
+        "default": 32,
+        "min": 1,
+        "max": 64
       }
     }
   },
@@ -177,7 +411,159 @@
         "description": "市场上架税率",
         "type": "float",
         "hint": "在市场上架物品时收取的税率",
-        "default": 0.05
+        "default": 0.05,
+        "min": 0.0,
+        "max": 1.0
+      }
+    }
+  },
+  "pond_upgrades": {
+    "description": "鱼塘容量升级阶梯",
+    "type": "object",
+    "hint": "配置鱼塘升级的各级容量与花费。容量应递增，费用涨幅建议与容量涨幅同阶（约8~10倍）",
+    "default": [
+      { "from": 480, "to": 2000, "cost": 50000 },
+      { "from": 2000, "to": 20000, "cost": 400000 },
+      { "from": 20000, "to": 200000, "cost": 5000000 },
+      { "from": 200000, "to": 1000000, "cost": 60000000 }
+    ]
+  },
+  "refine": {
+    "description": "装备精炼系统配置",
+    "type": "object",
+    "items": {
+      "max_level": {
+        "description": "精炼等级上限",
+        "type": "int",
+        "hint": "装备可精炼的最高等级",
+        "default": 10,
+        "min": 1,
+        "max": 20
+      },
+      "costs": {
+        "description": "各等级精炼费用",
+        "type": "object",
+        "hint": "key 为当前等级（1-10），value 为精炼到下一级的费用。实际费用 = 基础费用 × 稀有度系数",
+        "default": {
+          "1": 10000, "2": 30000, "3": 50000, "4": 100000,
+          "5": 200000, "6": 500000, "7": 1000000, "8": 2000000,
+          "9": 5000000, "10": 10000000
+        }
+      },
+      "cost_multipliers": {
+        "description": "精炼费用系数（按稀有度分档）",
+        "type": "object",
+        "hint": "key 为稀有度档位（1-2/3/4/5/6/7+）。设计原则：1→10级总费用随星级单调递增",
+        "default": {
+          "1-2": 0.20,
+          "3": 0.30,
+          "4": 0.42,
+          "5": 0.60,
+          "6": 0.80,
+          "7+": 1.00
+        }
+      },
+      "success_rates": {
+        "description": "各稀有度档的精炼成功率",
+        "type": "object",
+        "hint": "key 为稀有度档位（1-2/3/4/5/6/7+），value 为 10 个等级的��功率数组。装备仅可使用高于自身星级的档位",
+        "default": {
+          "1-2": [0.95, 0.95, 0.90, 0.90, 0.85, 0.80, 0.75, 0.70, 0.60, 0.50],
+          "3": [0.90, 0.90, 0.85, 0.85, 0.80, 0.75, 0.65, 0.55, 0.45, 0.35],
+          "4": [0.85, 0.85, 0.80, 0.80, 0.75, 0.70, 0.60, 0.50, 0.40, 0.30],
+          "5": [0.85, 0.85, 0.80, 0.75, 0.65, 0.50, 0.40, 0.35, 0.30, 0.25],
+          "6": [0.80, 0.80, 0.75, 0.70, 0.60, 0.45, 0.35, 0.30, 0.25, 0.20],
+          "7+": [0.80, 0.80, 0.80, 0.80, 0.70, 0.60, 0.50, 0.40, 0.30, 0.20]
+        }
+      },
+      "downgrade_chance": {
+        "description": "精炼失败降级概率",
+        "type": "float",
+        "hint": "精炼失败时装备等级 -1 的概率（不会毁坏）",
+        "default": 0.10,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "min_level_for_destruction": {
+        "description": "可触发毁坏的最低精炼等级",
+        "type": "int",
+        "hint": "精炼等级低于该值时，失败不会导致装备毁坏，用于保护低投入阶段",
+        "default": 5,
+        "min": 1
+      },
+      "destruction_chances": {
+        "description": "精炼失败毁坏概率（按稀有度分档）",
+        "type": "object",
+        "hint": "key 为稀有度档位。仅在精炼等级 >= min_level_for_destruction 时生效",
+        "default": {
+          "1-2": 0.30,
+          "3-4": 0.35,
+          "5-6": 0.40,
+          "7+": 0.50
+        }
+      },
+      "bonus_per_level": {
+        "description": "每级精炼提供的加成比例",
+        "type": "object",
+        "hint": "key 为稀有度档位，value 为每级增加的加成比例。高星装备加成更保守",
+        "default": {
+          "1-3": 0.15,
+          "4": 0.12,
+          "5": 0.08,
+          "6": 0.05,
+          "7+": 0.03
+        }
+      }
+    }
+  },
+  "wheel_of_fate": {
+    "description": "命运之轮配置",
+    "type": "object",
+    "items": {
+      "min_entry_fee": {
+        "description": "最低入场费",
+        "type": "int",
+        "hint": "启动命运之轮的最低投入金币",
+        "default": 500,
+        "min": 0
+      },
+      "max_entry_fee": {
+        "description": "最高入场费",
+        "type": "int",
+        "hint": "启动命运之轮的最高投入金币",
+        "default": 50000,
+        "min": 0
+      },
+      "cooldown_seconds": {
+        "description": "操作冷却",
+        "type": "int",
+        "hint": "两次【继续】之间的最小间隔（秒）",
+        "default": 60,
+        "min": 0
+      },
+      "timeout_seconds": {
+        "description": "轮盘超时时间",
+        "type": "int",
+        "hint": "超时未【继续】或【放弃】则自动结算的秒数",
+        "default": 60,
+        "min": 10
+      },
+      "levels": {
+        "description": "各关卡成功率与倍率",
+        "type": "object",
+        "hint": "数组，从第1关到第10关。每项含 success_rate（成功概率）与 multiplier（成功后倍率）",
+        "default": [
+          { "success_rate": 0.65, "multiplier": 1.55 },
+          { "success_rate": 0.60, "multiplier": 1.45 },
+          { "success_rate": 0.55, "multiplier": 1.55 },
+          { "success_rate": 0.50, "multiplier": 1.70 },
+          { "success_rate": 0.45, "multiplier": 1.90 },
+          { "success_rate": 0.40, "multiplier": 2.15 },
+          { "success_rate": 0.35, "multiplier": 2.50 },
+          { "success_rate": 0.30, "multiplier": 3.00 },
+          { "success_rate": 0.25, "multiplier": 3.70 },
+          { "success_rate": 0.20, "multiplier": 4.80 }
+        ]
       }
     }
   },
@@ -209,6 +595,36 @@
         "type": "int",
         "default": 10000,
         "description": "稀有度5的出售价格"
+      },
+      "by_rarity_6": {
+        "type": "int",
+        "default": 20000,
+        "description": "稀有度6的出售价格",
+        "min": 0
+      },
+      "by_rarity_7": {
+        "type": "int",
+        "default": 50000,
+        "description": "稀有度7的出售价格",
+        "min": 0
+      },
+      "by_rarity_8": {
+        "type": "int",
+        "default": 100000,
+        "description": "稀有度8的出售价格",
+        "min": 0
+      },
+      "by_rarity_9": {
+        "type": "int",
+        "default": 200000,
+        "description": "稀有度9的出售价格",
+        "min": 0
+      },
+      "by_rarity_10": {
+        "type": "int",
+        "default": 500000,
+        "description": "稀有度10的出售价格",
+        "min": 0
       }
     }
   },
@@ -328,6 +744,43 @@
             "type": "int",
             "default": 10000,
             "description": "鱼油初始价格（投机品，事件驱动）"
+          }
+        }
+      },
+      "commodities": {
+        "description": "大宗商品行情参数",
+        "type": "object",
+        "hint": "每个商品的波动率与风险描述。新增商品需同时在 commodities 表中登记",
+        "items": {
+          "dried_fish": {
+            "type": "object",
+            "default": {
+              "volatility": 0.08,
+              "risk": "稳健型",
+              "min_price": 3000,
+              "max_price": 12000
+            },
+            "description": "鱼干行情参数"
+          },
+          "fish_roe": {
+            "type": "object",
+            "default": {
+              "volatility": 0.12,
+              "risk": "高风险",
+              "min_price": 5000,
+              "max_price": 30000
+            },
+            "description": "鱼卵行情参数"
+          },
+          "fish_oil": {
+            "type": "object",
+            "default": {
+              "volatility": 0.10,
+              "risk": "投机品",
+              "min_price": 4000,
+              "max_price": 25000
+            },
+            "description": "鱼油行情参数"
           }
         }
       }

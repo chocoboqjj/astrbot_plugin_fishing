@@ -1,9 +1,26 @@
 import sqlite3
 import os
 import re
-import importlib
+import importlib.util
 
 from astrbot.api import logger
+
+
+def _load_migration_module(file_path: str):
+    """
+    按文件路径动态加载迁移模块。
+
+    早期实现使用硬编码包路径 ``data.plugins.astrbot_plugin_fishing...`` 来 importlib.import_module，
+    这会导致插件改名、移动目录或以非默认方式安装时直接崩溃（ModuleNotFoundError: data）。
+    这里改为从绝对文件路径加载，只要迁移文件存在就能执行。
+    """
+    module_name = os.path.splitext(os.path.basename(file_path))[0]
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"无法加载迁移文件: {file_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 def get_current_version(cursor: sqlite3.Cursor) -> int:
     """获取当前数据库的版本号。"""
@@ -53,9 +70,9 @@ def run_migrations(db_path: str, migrations_dir: str):
         version = int(filename.split("_")[0])
         if version > current_version:
             logger.info(f"正在应用迁移脚本: {filename}...")
+            file_path = os.path.join(migrations_dir, filename)
             try:
-                module_name = f"data.plugins.astrbot_plugin_fishing.core.database.migrations.{filename[:-3]}"
-                migration_module = importlib.import_module(module_name)
+                migration_module = _load_migration_module(file_path)
 
                 with sqlite3.connect(db_path) as conn:
                     conn.row_factory = sqlite3.Row
@@ -73,5 +90,5 @@ def run_migrations(db_path: str, migrations_dir: str):
                         logger.error(f"应用迁移失败: {filename}。错误: {e}")
                         raise
             except Exception as e:
-                logger.error(f"加载迁移模块失败: {module_name}。错误: {e}")
+                logger.error(f"加载迁移模块失败: {file_path}。错误: {e}")
                 raise
