@@ -6,6 +6,16 @@
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
 - 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.7）。
 
+## 排障备忘
+- **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
+  旧账号会残留，注册即提示「用户已注册」（2026-10-10 用户亲历，原因就是 fish.db 没删干净）。
+- 重置环境正确姿势：停插件 → 删除 `fish.db`（路径来自 `context.get_data_dir("astrbot_plugin_fishing")`，
+  在插件目录之外，重装/重载插件都不会清它）→ 重启。
+- 账号 **全局不按群隔离**：`user_id = event.get_sender_id()`（main.py `_get_effective_user_id`），
+  同一平台任意群/私聊注册过则处处提示已注册。玩家侧无「注销」命令，删号只能走 Web 后台
+  （`user_service.delete_user_for_admin`）。
+- `MARKET` 是系统虚拟用户（market_service 自动创建，用于托管上架装备），出现在 users 表属正常。
+
 ## 项目结构要点
 - 配置单一事实来源：`core/config_defaults.py`（`build_game_config()` 做容错与区间修正）
 - 配置流：`_conf_schema.json → AstrBotConfig → build_game_config → 各 Service`
