@@ -72,6 +72,16 @@ def draw_help_image():
         draw.rounded_rectangle([x0, y0, x1, y1], radius, fill=card_bg, outline=line_color, width=1)
 
     # 8. 绘制章节和命令
+    def fit_font(text, size, max_w, min_size=11):
+        """按卡片可用宽度自适应缩小字号，避免长命令/描述溢出卡片。"""
+        font = load_font(size)
+        while size > min_size:
+            if measure_text_size(text, font)[0] <= max_w:
+                break
+            size -= 1
+            font = load_font(size)
+        return font
+
     def draw_section(title, cmds, y_start, cols=3):
         # 章节标题左对齐
         title_x = 50
@@ -101,12 +111,15 @@ def draw_help_image():
 
             # 文本居中显示
             cx = (x0 + x1) // 2
-            # 命令文本
-            draw.text((cx, y0 + 18), cmd, fill=cmd_color, font=cmd_font, anchor="mt")
+            max_w = card_w - 20
+            # 命令文本（过长时自动缩小字号，避免溢出卡片）
+            draw.text((cx, y0 + 18), cmd, fill=cmd_color,
+                      font=fit_font(cmd, 18, max_w), anchor="mt")
             # 描述文本 - 支持多行
             desc_lines = desc.split('\n') if '\n' in desc else [desc]
             for i, line in enumerate(desc_lines):
-                draw.text((cx, y0 + 45 + i * 18), line, fill=(100, 100, 100), font=desc_font, anchor="mt")
+                draw.text((cx, y0 + 45 + i * 18), line, fill=(100, 100, 100),
+                          font=fit_font(line, 16, max_w), anchor="mt")
 
         rows = math.ceil(len(cmds) / cols)
         return y + rows * (card_h + pad) + 35
@@ -117,7 +130,7 @@ def draw_help_image():
         ("钓鱼", "进行一次钓鱼"),
         ("签到", "每日签到"),
         ("自动钓鱼", "开启/关闭\n自动钓鱼"),
-        ("钓鱼区域 [ID]", "查看或切换\n钓鱼区域"),
+        ("钓鱼区域 [ID]", "查看或切换\n区域4需通行证"),
         ("钓鱼记录", "查看最近\n钓鱼记录"),
         ("更新昵称 [新昵称]", "更新你的\n游戏昵称"),
         ("钓鱼帮助", "查看帮助菜单"),
@@ -140,7 +153,7 @@ def draw_help_image():
         ("道具", "查看我的道具"),
         ("使用 [ID]", "使用指定ID的\n道具/装备"),
         ("开启全部钱袋", "一次性开启\n所有钱袋类道具"),
-        ("精炼 [ID]", "精炼指定ID的\n鱼竿或饰品(无参数显示帮助)"),
+        ("精炼 [ID]", "精炼鱼竿或饰品\n上限10级(无参数看帮助)"),
         ("出售 [ID]", "出售指定ID的\n物品(R=鱼竿,A=饰品,D=道具)"),
         ("锁定 [ID]", "锁定指定ID的\n鱼竿或饰品"),
         ("解锁 [ID]", "解锁指定ID的\n鱼竿或饰品"),
@@ -152,10 +165,10 @@ def draw_help_image():
         ("全部卖出", "一键卖出\n鱼塘所有鱼"),
         ("保留卖出", "卖出所有鱼\n但每种保留一条"),
         ("砸锅卖铁", "危险操作！清空\n全部鱼(非用/保)鱼竿饰品"),
-        ("出售稀有度 [1-5]", "卖出指定\n稀有度的鱼"),
+        ("出售稀有度 [1-10]", "卖出指定稀有度的鱼\n可多填: 出售稀有度 3 4 5"),
         ("出售所有鱼竿", "一键出售所有\n(非在用/非保护)鱼竿"),
         ("出售所有饰品", "一键出售所有\n(非在用/非保护)饰品"),
-        ("商店", "查看官方商店"),
+        ("商店", "查看4家官方商店\n(含星石店/限时店)"),
         ("商店购买 [商店ID][商品ID][数量]", "从商店购买\n指定商品，数量默认为1"),
         ("市场", "查看玩家交易市场"),
         ("上架 [ID] [价格] [数量] [匿名]", "将物品上架到市场，支持匿名"),
@@ -186,6 +199,7 @@ def draw_help_image():
         ("鸭一点 [金额]", "鸭骰子出现1\n动态赔率"),
         ("鸭4点 [金额]", "鸭总点数4\n赔率1:50"),
         ("鸭17点 [金额]", "鸭总点数17\n赔率1:50"),
+        ("💡 点数写法", "中文=单点(鸭四点)\n数字=总点数(鸭4点)"),
         ("骰宝状态", "查看游戏状态"),
         ("我的下注", "查看下注情况"),
         ("骰宝帮助", "查看详细规则"),
