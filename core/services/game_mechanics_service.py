@@ -82,7 +82,8 @@ class GameMechanicsService:
         inventory_repo: AbstractInventoryRepository,
         item_template_repo: AbstractItemTemplateRepository,
         buff_repo: AbstractUserBuffRepository,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        fishing_class_service=None,
     ):
         self.user_repo = user_repo
         self.log_repo = log_repo
@@ -90,6 +91,8 @@ class GameMechanicsService:
         self.item_template_repo = item_template_repo
         self.buff_repo = buff_repo
         self.config = config
+        # 钓鱼阶级服务（可选依赖，为 None 时无阶级加成）
+        self.fishing_class_service = fishing_class_service
         # 服务器级别的抑制状态
         self._server_suppressed = False
         self._last_suppression_date = None
@@ -246,6 +249,35 @@ class GameMechanicsService:
         
         return {"success": True, "message": message}
 
+    def get_wipe_bomb_max_attempts(self, user_id: str, user=None) -> int:
+        """每日擦弹总次数 = 基础次数 + buff 加成 + 阶级加成。
+
+        状态图与擦弹入口共用此方法，避免两处算法不一致导致「图上看还有次数、实际说用完了」。
+        """
+        base_max_attempts = self.config.get("wipe_bomb", {}).get("max_attempts_per_day", 3)
+
+        extra_attempts = 0
+        boost_buff = self.buff_repo.get_active_by_user_and_type(
+            user_id, "WIPE_BOMB_ATTEMPTS_BOOST"
+        )
+        if boost_buff and boost_buff.payload:
+            try:
+                extra_attempts = json.loads(boost_buff.payload).get("amount", 0)
+            except json.JSONDecodeError:
+                logger.warning(f"解析擦弹buff载荷失败: user_id={user_id}")
+
+        class_bonus = 0
+        if self.fishing_class_service:
+            try:
+                if user is None:
+                    user = self.user_repo.get_by_id(user_id)
+                class_bonus = self.fishing_class_service.get_wipe_bomb_bonus_for_user(user)
+            except Exception as e:
+                logger.warning(f"[阶级] 读取用户 {user_id} 擦弹加成失败: {e}")
+                class_bonus = 0
+
+        return int(base_max_attempts) + int(extra_attempts or 0) + int(class_bonus or 0)
+
     def perform_wipe_bomb(self, user_id: str, contribution_amount: int) -> Dict[str, Any]:
         """
         处理“擦弹”的完整逻辑。
@@ -260,23 +292,9 @@ class GameMechanicsService:
         if not user.can_afford(contribution_amount):
             return {"success": False, "message": f"金币不足，当前拥有 {user.coins} 金币"}
 
-        # 2. 检查每日次数限制 (性能优化)
+        # 2. 检查每日次数限制（基础 + buff + 阶级加成，统一走同一方法）
         wipe_bomb_config = self.config.get("wipe_bomb", {})
-        base_max_attempts = wipe_bomb_config.get("max_attempts_per_day", 3)
-
-        # 检查是否有增加次数的 buff
-        extra_attempts = 0
-        boost_buff = self.buff_repo.get_active_by_user_and_type(
-            user_id, "WIPE_BOMB_ATTEMPTS_BOOST"
-        )
-        if boost_buff and boost_buff.payload:
-            try:
-                payload = json.loads(boost_buff.payload)
-                extra_attempts = payload.get("amount", 0)
-            except json.JSONDecodeError:
-                logger.warning(f"解析擦弹buff载荷失败: user_id={user_id}")
-
-        total_max_attempts = base_max_attempts + extra_attempts
+        total_max_attempts = self.get_wipe_bomb_max_attempts(user_id, user=user)
         
         # 获取今天的日期字符串
         today_str = get_today().strftime('%Y-%m-%d')

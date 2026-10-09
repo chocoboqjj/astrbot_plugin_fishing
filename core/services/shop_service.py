@@ -4,6 +4,8 @@ import copy
 import math
 import random
 
+from astrbot.api import logger
+
 # 导入仓储接口
 from ..repositories.abstract_repository import (
     AbstractItemTemplateRepository,
@@ -25,12 +27,15 @@ class ShopService:
         user_repo: AbstractUserRepository,
         shop_repo: Optional[AbstractShopRepository] = None,
         config: Optional[Dict[str, Any]] = None,
+        fishing_class_service=None,
     ):
         self.item_template_repo = item_template_repo
         self.inventory_repo = inventory_repo
         self.user_repo = user_repo
         self.shop_repo = shop_repo
         self.config = config or {}
+        # 钓鱼阶级服务（可选依赖，为 None 时按原价结算）
+        self.fishing_class_service = fishing_class_service
 
     def _parse_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
         """解析时间字符串为 datetime 对象"""
@@ -248,7 +253,23 @@ class ShopService:
         final_total_costs = and_costs.copy()
         for cost_part in or_solution:
             self._merge_costs(final_total_costs, cost_part)
-        
+
+        # 5.5 应用阶级特权：商店折扣
+        # 说明：资源校验发生在折扣之前，玩家按原价也能付得起时才走到这里，
+        # 因此打折后一定能付得起。向上取整且保底 1，避免折扣把商品变成 0 元。
+        discount = 0.0
+        if self.fishing_class_service:
+            try:
+                discount = self.fishing_class_service.get_shop_discount_for_user(user)
+            except Exception as e:
+                logger.warning(f"[阶级] 读取用户 {user_id} 商店折扣失败（按原价结算）: {e}")
+                discount = 0.0
+        if discount > 0:
+            for money_key in ("coins", "premium"):
+                original_cost = int(final_total_costs.get(money_key, 0) or 0)
+                if original_cost > 0:
+                    final_total_costs[money_key] = max(1, math.ceil(original_cost * (1.0 - discount)))
+
         # 6. 执行真实的交易
         self._deduct_costs(user, final_total_costs)
         obtained_items = self._give_rewards(user_id, rewards, quantity)
@@ -257,6 +278,8 @@ class ShopService:
         self.shop_repo.add_purchase_record(user_id, item_id, quantity)
         
         success_message = f"✅ 购买成功：{item['name']} x{quantity}"
+        if discount > 0:
+            success_message += f"\n🎖️ 阶级折扣 -{int(discount * 100)}%"
         if obtained_items:
             unique_items = list(set(obtained_items))
             success_message += f"\n📦 获得物品：\n" + "\n".join([f"  • {item}" for item in unique_items])

@@ -13,6 +13,7 @@ from ..repositories.abstract_repository import (
 from .gacha_service import GachaService
 from ..domain.models import User, TaxRecord
 from ..utils import get_now, get_today
+from astrbot.api import logger
 
 
 class UserService:
@@ -39,7 +40,8 @@ class UserService:
         item_template_repo: AbstractItemTemplateRepository,
         gacha_service: "GachaService",
         config: Dict[str, Any],
-        achievement_repo: Optional[AbstractAchievementRepository] = None
+        achievement_repo: Optional[AbstractAchievementRepository] = None,
+        fishing_class_service=None,
     ):
         self.user_repo = user_repo
         self.log_repo = log_repo
@@ -48,6 +50,8 @@ class UserService:
         self.gacha_service = gacha_service
         self.config = config
         self.achievement_repo = achievement_repo
+        # 钓鱼阶级服务（可选依赖，为 None 时跳过阶级称号发放）
+        self.fishing_class_service = fishing_class_service
 
     def register(self, user_id: str, nickname: str) -> Dict[str, Any]:
         """
@@ -69,6 +73,14 @@ class UserService:
             created_at=get_now()
         )
         self.user_repo.add(new_user)
+
+        # 新用户默认第 1 阶，补发「见习钓手」称号（库内不存在时忽略，幂等）
+        if self.fishing_class_service:
+            try:
+                self.fishing_class_service.grant_titles_up_to(user_id, 1)
+            except Exception as e:
+                logger.warning(f"[阶级] 新用户 {user_id} 发放初始阶级称号失败: {e}")
+
         return {
             "success": True,
             "message": f"注册成功！欢迎 {nickname} 🎉 你获得了 {initial_coins} 金币作为起始资金。"

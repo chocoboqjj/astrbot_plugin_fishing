@@ -384,6 +384,58 @@ DEFAULT_POND_UPGRADES: List[Dict[str, int]] = [
     {"from": 200000, "to": 1000000, "cost": 60000000},
 ]
 
+# --- 钓鱼阶级系统（段位制 · 纯增益型） ---
+# 设计取舍
+# --------
+# · 段位制：单一纵向阶梯，双门槛自动晋升、只升不降。
+# · 双门槛 = 累计钓鱼次数 + 图鉴收集数。自动钓鱼冷却 180s（约 480 次/天），
+#   只靠挂机约 31 天即可到 15,000 次；加入图鉴门槛后，高阶被「收集深度」卡住
+#   （112 种鱼中的 6★ 稀有鱼极难出），避免纯时长灌满。
+# · 纯增益型特权：只给税收折扣 / 商店折扣 / 称号，
+#   **不锁定任何已有内容**（区域、鱼塘档位、精炼等级均不受限），老玩家零风险。
+#
+# 字段说明
+#   level         阶级
+#   name          阶级名
+#   fish_count    累计钓鱼次数门槛
+#   pokedex       图鉴收集数门槛
+#   title_id      对应称号 ID（由迁移 047 播种，901-909）
+#   tax_discount  每日资产税折扣（0.10 = 减税 10%）
+#   shop_discount 商店购买折扣（0.05 = 95 折）
+#   wipe_bomb_bonus 每日擦弹次数加成
+#
+# ⚠️ 修改门槛时请同步 core/database/migrations/047_add_fishing_class.py 中的
+#    CLASS_TIERS（迁移必须能独立运行，不导入本模块）。
+DEFAULT_FISHING_CLASS_CONFIG: Dict[str, Any] = {
+    "enabled": True,
+    "total_fish_species": 112,      # 图鉴总数，仅用于展示进度
+    "score_weights": {              # 钓力值权重（展示/排行用，不作为门槛）
+        "fish_count": 1,
+        "pokedex": 20,
+        "refine": 30,
+    },
+    "tiers": [
+        {"level": 1, "name": "见习钓手", "fish_count": 0,     "pokedex": 0,   "title_id": 901,
+         "tax_discount": 0.00, "shop_discount": 0.00, "wipe_bomb_bonus": 0},
+        {"level": 2, "name": "初阶钓手", "fish_count": 50,    "pokedex": 5,   "title_id": 902,
+         "tax_discount": 0.00, "shop_discount": 0.00, "wipe_bomb_bonus": 0},
+        {"level": 3, "name": "熟练钓手", "fish_count": 200,   "pokedex": 15,  "title_id": 903,
+         "tax_discount": 0.02, "shop_discount": 0.00, "wipe_bomb_bonus": 1},
+        {"level": 4, "name": "资深钓手", "fish_count": 500,   "pokedex": 28,  "title_id": 904,
+         "tax_discount": 0.04, "shop_discount": 0.02, "wipe_bomb_bonus": 2},
+        {"level": 5, "name": "钓鱼高手", "fish_count": 1200,  "pokedex": 42,  "title_id": 905,
+         "tax_discount": 0.06, "shop_discount": 0.03, "wipe_bomb_bonus": 3},
+        {"level": 6, "name": "钓鱼大师", "fish_count": 2500,  "pokedex": 58,  "title_id": 906,
+         "tax_discount": 0.08, "shop_discount": 0.05, "wipe_bomb_bonus": 4},
+        {"level": 7, "name": "钓鱼宗师", "fish_count": 5000,  "pokedex": 74,  "title_id": 907,
+         "tax_discount": 0.10, "shop_discount": 0.06, "wipe_bomb_bonus": 5},
+        {"level": 8, "name": "传说钓者", "fish_count": 9000,  "pokedex": 90,  "title_id": 908,
+         "tax_discount": 0.12, "shop_discount": 0.08, "wipe_bomb_bonus": 6},
+        {"level": 9, "name": "钓神",     "fish_count": 15000, "pokedex": 102, "title_id": 909,
+         "tax_discount": 0.15, "shop_discount": 0.10, "wipe_bomb_bonus": 8},
+    ],
+}
+
 # --- 命运之轮 ---
 DEFAULT_WHEEL_OF_FATE_CONFIG: Dict[str, Any] = {
     "min_entry_fee": 500,
@@ -649,6 +701,84 @@ def build_game_config(config: Any) -> Dict[str, Any]:
             )
         pond_upgrades = valid_upgrades or [dict(item) for item in DEFAULT_POND_UPGRADES]
 
+    # 钓鱼阶级：校验门槛单调性与折扣区间，非法配置整段回退到默认值
+    raw_class = merged.get("fishing_class")
+    if not isinstance(raw_class, Mapping):
+        raw_class = {}
+    class_enabled = coerce_bool(raw_class.get("enabled", True), True)
+    total_fish_species = coerce_int(
+        raw_class.get("total_fish_species", DEFAULT_FISHING_CLASS_CONFIG["total_fish_species"]),
+        DEFAULT_FISHING_CLASS_CONFIG["total_fish_species"],
+        minimum=1,
+    )
+    raw_weights = raw_class.get("score_weights")
+    score_weights = {}
+    default_weights = DEFAULT_FISHING_CLASS_CONFIG["score_weights"]
+    if isinstance(raw_weights, Mapping):
+        for wkey, wdefault in default_weights.items():
+            score_weights[wkey] = coerce_float(raw_weights.get(wkey, wdefault), wdefault, minimum=0.0)
+    else:
+        score_weights = dict(default_weights)
+
+    # 兼容两种下发形态：后台 schema 生成 {"1": {...}, "2": {...}}，手工配置常写 [{...}, {...}]
+    raw_tiers = raw_class.get("tiers")
+    if isinstance(raw_tiers, Mapping):
+        raw_tiers = [
+            raw_tiers[k]
+            for k in sorted(raw_tiers, key=lambda x: int(x) if str(x).isdigit() else 0)
+        ]
+    valid_tiers: List[Dict[str, Any]] = []
+    if isinstance(raw_tiers, list):
+        prev_count = -1
+        prev_pokedex = -1
+        for tier in raw_tiers:
+            if not isinstance(tier, Mapping):
+                continue
+            try:
+                lv = coerce_int(tier.get("level", 0), 0, minimum=1)
+                need_count = coerce_int(tier.get("fish_count", 0), 0, minimum=0)
+                need_pokedex = coerce_int(tier.get("pokedex", 0), 0, minimum=0)
+            except Exception:
+                continue
+            # 门槛必须单调不减，否则晋升判定会出现「高阶比低阶更容易达到」
+            if need_count < prev_count or need_pokedex < prev_pokedex:
+                logger.warning(f"[CONFIG] 钓鱼阶级门槛必须递增，已忽略: {tier!r}")
+                continue
+            prev_count, prev_pokedex = need_count, need_pokedex
+            valid_tiers.append(
+                {
+                    "level": lv,
+                    "name": str(tier.get("name", f"第{lv}阶")),
+                    "fish_count": need_count,
+                    "pokedex": need_pokedex,
+                    "title_id": coerce_int(tier.get("title_id", 0), 0, minimum=0),
+                    "tax_discount": min(
+                        max(coerce_float(tier.get("tax_discount", 0.0), 0.0, minimum=0.0), 0.0), 0.9
+                    ),
+                    "shop_discount": min(
+                        max(coerce_float(tier.get("shop_discount", 0.0), 0.0, minimum=0.0), 0.0), 0.9
+                    ),
+                    "wipe_bomb_bonus": coerce_int(tier.get("wipe_bomb_bonus", 0), 0, minimum=0),
+                }
+            )
+
+    if not valid_tiers:
+        fishing_class = {
+            "enabled": class_enabled,
+            "total_fish_species": total_fish_species,
+            "score_weights": score_weights,
+            "tiers": [dict(t) for t in DEFAULT_FISHING_CLASS_CONFIG["tiers"]],
+        }
+        if isinstance(raw_tiers, list) and raw_tiers:
+            logger.warning("[CONFIG] 钓鱼阶级配置全部非法，已回退到默认值")
+    else:
+        fishing_class = {
+            "enabled": class_enabled,
+            "total_fish_species": total_fish_species,
+            "score_weights": score_weights,
+            "tiers": valid_tiers,
+        }
+
     wheel = merged.get("wheel_of_fate", {})
     if not isinstance(wheel, Mapping):
         wheel = {}
@@ -785,6 +915,7 @@ def build_game_config(config: Any) -> Dict[str, Any]:
         "notifications": notifications,
         "tax": dict(tax),
         "pond_upgrades": pond_upgrades,
+        "fishing_class": fishing_class,
         "wheel_of_fate": dict(wheel),
         "refine": refine_out,
         "zones": merged.get("zones") if isinstance(merged.get("zones"), Mapping) else dict(DEFAULT_ZONE_CONFIG),

@@ -26,6 +26,19 @@ async def sign_in(self: "FishingPlugin", event: AstrMessageEvent):
     if result["success"]:
         yield event.plain_result(result["message"])
 
+async def fishing_class(self: "FishingPlugin", event: AstrMessageEvent):
+    """查看钓鱼阶级（段位制·纯增益型）"""
+    user_id = self._get_effective_user_id(event)
+    if not self.user_repo.get_by_id(user_id):
+        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+        return
+    try:
+        # 先跑一次晋升检查，避免「条件已满足但尚未触发晋升」时显示旧阶级
+        self.fishing_class_service.check_promotion(user_id)
+        yield event.plain_result(self.fishing_class_service.format_class_info(user_id))
+    except Exception as e:
+        yield event.plain_result(f"❌ 获取阶级信息失败：{e}")
+
 async def state(self: "FishingPlugin", event: AstrMessageEvent):
     """查看用户状态"""
     user_id = self._get_effective_user_id(event)
@@ -39,6 +52,7 @@ async def state(self: "FishingPlugin", event: AstrMessageEvent):
         self.buff_repo,
         self.game_config,
         user_id,
+        getattr(self, "fishing_class_service", None),
     )
     
     if not user_data:

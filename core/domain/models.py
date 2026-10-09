@@ -214,6 +214,12 @@ class User:
     fish_pond_capacity: int = 480
     aquarium_capacity: int = 50  # 水族箱容量
     fishing_zone_id: int = 1  # 默认钓鱼区域ID
+
+    # --- 钓鱼阶级系统（迁移 047，段位制 · 纯增益型） ---
+    # fishing_class_level: 当前阶级（1-9），由「钓鱼次数 + 图鉴数」双门槛自动晋升、只升不降
+    # fishing_class_score : 钓力值（展示/排行用），= 钓鱼次数 + 图鉴数×20 + 最高精炼×30
+    fishing_class_level: int = 1
+    fishing_class_score: int = 0
     exchange_account_status: bool = False # 交易所账户状态
 
     max_wipe_bomb_multiplier: float = 0.0

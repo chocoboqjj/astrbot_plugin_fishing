@@ -497,7 +497,7 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
     return image
 
 
-def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo, buff_repo, game_config, user_id: str) -> Optional[Dict[str, Any]]:
+def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo, buff_repo, game_config, user_id: str, fishing_class_service=None) -> Optional[Dict[str, Any]]:
     """
     获取用户状态数据
     
@@ -661,8 +661,15 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
                 extra_attempts = json.loads(boost_buff.payload).get("amount", 0)
             except json.JSONDecodeError: pass
         
-        total_max_attempts = base_max_attempts + extra_attempts
-        
+        # 阶级特权：每日擦弹次数加成（与 game_mechanics_service 的计算方式保持一致）
+        class_bonus = 0
+        if fishing_class_service is not None:
+            try:
+                class_bonus = fishing_class_service.get_wipe_bomb_bonus_for_user(user)
+            except Exception:
+                class_bonus = 0
+        total_max_attempts = base_max_attempts + extra_attempts + class_bonus
+
         today_str = get_today().strftime('%Y-%m-%d')
         used_attempts_today = 0
         # 如果记录的日期是今天，就使用记录的次数；否则次数为0

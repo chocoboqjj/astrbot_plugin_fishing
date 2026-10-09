@@ -132,8 +132,22 @@ def draw_help_image():
         ("自动钓鱼", "开启/关闭\n自动钓鱼"),
         ("钓鱼区域 [ID]", "查看或切换\n区域4需通行证"),
         ("钓鱼记录", "查看最近\n钓鱼记录"),
+        ("阶级", "查看钓鱼阶级\n特权与升阶进度"),
         ("更新昵称 [新昵称]", "更新你的\n游戏昵称"),
         ("钓鱼帮助", "查看帮助菜单"),
+    ]
+
+    fishing_class = [
+        ("1阶 见习钓手", "0次 / 0种\n无特权"),
+        ("2阶 初阶钓手", "50次 / 5种\n无特权"),
+        ("3阶 熟练钓手", "200次 / 15种\n税-2% · 擦弹+1"),
+        ("4阶 资深钓手", "500次 / 28种\n税-4% · 店98折 · 擦弹+2"),
+        ("5阶 钓鱼高手", "1200次 / 42种\n税-6% · 店97折 · 擦弹+3"),
+        ("6阶 钓鱼大师", "2500次 / 58种\n税-8% · 店95折 · 擦弹+4"),
+        ("7阶 钓鱼宗师", "5000次 / 74种\n税-10% · 店94折 · 擦弹+5"),
+        ("8阶 传说钓者", "9000次 / 90种\n税-12% · 店92折 · 擦弹+6"),
+        ("9阶 钓神", "15000次 / 102种\n税-15% · 店9折 · 擦弹+8"),
+        ("💡 升阶规则", "钓鱼次数 + 图鉴数\n需同时满足 · 只升不降"),
     ]
 
     inventory = [
@@ -273,6 +287,7 @@ def draw_help_image():
 
     y0_est = logo_y + logo_size + 30
     y0_est += section_delta(len(basic), 3)
+    y0_est += section_delta(len(fishing_class), 3)
     y0_est += section_delta(len(inventory), 3)
     y0_est += section_delta(len(market), 3)
     y0_est += section_delta(len(gacha), 3)
@@ -316,6 +331,7 @@ def draw_help_image():
     # 10+. 按顺序绘制各个部分
     y0 = logo_y + logo_size + 30
     y0 = draw_section("🎣 基础与核心玩法", basic, y0, cols=3)
+    y0 = draw_section("🎖️ 钓鱼阶级（段位制 · 纯增益）", fishing_class, y0, cols=3)
     y0 = draw_section("🎒 背包与资产管理", inventory, y0, cols=3)
     y0 = draw_section("🛒 商店与市场", market, y0, cols=3)
     y0 = draw_section("🎰 抽卡与概率玩法", gacha, y0, cols=3)

@@ -524,6 +524,464 @@
       }
     }
   },
+  "fishing_class": {
+    "description": "钓鱼阶级系统（段位制·纯增益型）",
+    "type": "object",
+    "hint": "双门槛自动晋升：累计钓鱼次数 + 图鉴收集数需同时满足。特权为纯增益，不锁定任何已有内容",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "default": true,
+        "description": "是否启用钓鱼阶级系统"
+      },
+      "total_fish_species": {
+        "type": "int",
+        "default": 112,
+        "description": "图鉴鱼类总数，仅用于展示进度"
+      },
+      "score_weights": {
+        "type": "object",
+        "description": "钓力值权重（展示/排行用，不作为晋升门槛）",
+        "items": {
+          "fish_count": {
+            "type": "float",
+            "default": 1,
+            "description": "每钓1次的权重"
+          },
+          "pokedex": {
+            "type": "float",
+            "default": 20,
+            "description": "每收集1种鱼的权重"
+          },
+          "refine": {
+            "type": "float",
+            "default": 30,
+            "description": "最高精炼等级的权重"
+          }
+        }
+      },
+      "tiers": {
+        "type": "object",
+        "description": "阶级阶梯（门槛必须递增）",
+        "items": {
+          "1": {
+            "type": "object",
+            "description": "1阶 见习钓手",
+            "items": {
+              "level": {
+                "type": "int",
+                "default": 1,
+                "description": "阶级"
+              },
+              "name": {
+                "type": "string",
+                "default": "见习钓手",
+                "description": "阶级名"
+              },
+              "fish_count": {
+                "type": "int",
+                "default": 0,
+                "description": "累计钓鱼次数门槛"
+              },
+              "pokedex": {
+                "type": "int",
+                "default": 0,
+                "description": "图鉴收集数门槛"
+              },
+              "title_id": {
+                "type": "int",
+                "default": 901,
+                "description": "对应称号ID（迁移047播种）"
+              },
+              "tax_discount": {
+                "type": "float",
+                "default": 0.0,
+                "description": "每日资产税折扣，0.10=减税10%"
+              },
+              "shop_discount": {
+                "type": "float",
+                "default": 0.0,
+                "description": "商店购买折扣，0.05=95折"
+              },
+              "wipe_bomb_bonus": {
+                "type": "int",
+                "default": 0,
+                "description": "每日擦弹次数加成"
+              }
+            }
+          },
+          "2": {
+            "type": "object",
+            "description": "2阶 初阶钓手",
+            "items": {
+              "level": {
+                "type": "int",
+                "default": 2,
+                "description": "阶级"
+              },
+              "name": {
+                "type": "string",
+                "default": "初阶钓手",
+                "description": "阶级名"
+              },
+              "fish_count": {
+                "type": "int",
+                "default": 50,
+                "description": "累计钓鱼次数门槛"
+              },
+              "pokedex": {
+                "type": "int",
+                "default": 5,
+                "description": "图鉴收集数门槛"
+              },
+              "title_id": {
+                "type": "int",
+                "default": 902,
+                "description": "对应称号ID（迁移047播种）"
+              },
+              "tax_discount": {
+                "type": "float",
+                "default": 0.0,
+                "description": "每日资产税折扣，0.10=减税10%"
+              },
+              "shop_discount": {
+                "type": "float",
+                "default": 0.0,
+                "description": "商店购买折扣，0.05=95折"
+              },
+              "wipe_bomb_bonus": {
+                "type": "int",
+                "default": 0,
+                "description": "每日擦弹次数加成"
+              }
+            }
+          },
+          "3": {
+            "type": "object",
+            "description": "3阶 熟练钓手",
+            "items": {
+              "level": {
+                "type": "int",
+                "default": 3,
+                "description": "阶级"
+              },
+              "name": {
+                "type": "string",
+                "default": "熟练钓手",
+                "description": "阶级名"
+              },
+              "fish_count": {
+                "type": "int",
+                "default": 200,
+                "description": "累计钓鱼次数门槛"
+              },
+              "pokedex": {
+                "type": "int",
+                "default": 15,
+                "description": "图鉴收集数门槛"
+              },
+              "title_id": {
+                "type": "int",
+                "default": 903,
+                "description": "对应称号ID（迁移047播种）"
+              },
+              "tax_discount": {
+                "type": "float",
+                "default": 0.02,
+                "description": "每日资产税折扣，0.10=减税10%"
+              },
+              "shop_discount": {
+                "type": "float",
+                "default": 0.0,
+                "description": "商店购买折扣，0.05=95折"
+              },
+              "wipe_bomb_bonus": {
+                "type": "int",
+                "default": 1,
+                "description": "每日擦弹次数加成"
+              }
+            }
+          },
+          "4": {
+            "type": "object",
+            "description": "4阶 资深钓手",
+            "items": {
+              "level": {
+                "type": "int",
+                "default": 4,
+                "description": "阶级"
+              },
+              "name": {
+                "type": "string",
+                "default": "资深钓手",
+                "description": "阶级名"
+              },
+              "fish_count": {
+                "type": "int",
+                "default": 500,
+                "description": "累计钓鱼次数门槛"
+              },
+              "pokedex": {
+                "type": "int",
+                "default": 28,
+                "description": "图鉴收集数门槛"
+              },
+              "title_id": {
+                "type": "int",
+                "default": 904,
+                "description": "对应称号ID（迁移047播种）"
+              },
+              "tax_discount": {
+                "type": "float",
+                "default": 0.04,
+                "description": "每日资产税折扣，0.10=减税10%"
+              },
+              "shop_discount": {
+                "type": "float",
+                "default": 0.02,
+                "description": "商店购买折扣，0.05=95折"
+              },
+              "wipe_bomb_bonus": {
+                "type": "int",
+                "default": 2,
+                "description": "每日擦弹次数加成"
+              }
+            }
+          },
+          "5": {
+            "type": "object",
+            "description": "5阶 钓鱼高手",
+            "items": {
+              "level": {
+                "type": "int",
+                "default": 5,
+                "description": "阶级"
+              },
+              "name": {
+                "type": "string",
+                "default": "钓鱼高手",
+                "description": "阶级名"
+              },
+              "fish_count": {
+                "type": "int",
+                "default": 1200,
+                "description": "累计钓鱼次数门槛"
+              },
+              "pokedex": {
+                "type": "int",
+                "default": 42,
+                "description": "图鉴收集数门槛"
+              },
+              "title_id": {
+                "type": "int",
+                "default": 905,
+                "description": "对应称号ID（迁移047播种）"
+              },
+              "tax_discount": {
+                "type": "float",
+                "default": 0.06,
+                "description": "每日资产税折扣，0.10=减税10%"
+              },
+              "shop_discount": {
+                "type": "float",
+                "default": 0.03,
+                "description": "商店购买折扣，0.05=95折"
+              },
+              "wipe_bomb_bonus": {
+                "type": "int",
+                "default": 3,
+                "description": "每日擦弹次数加成"
+              }
+            }
+          },
+          "6": {
+            "type": "object",
+            "description": "6阶 钓鱼大师",
+            "items": {
+              "level": {
+                "type": "int",
+                "default": 6,
+                "description": "阶级"
+              },
+              "name": {
+                "type": "string",
+                "default": "钓鱼大师",
+                "description": "阶级名"
+              },
+              "fish_count": {
+                "type": "int",
+                "default": 2500,
+                "description": "累计钓鱼次数门槛"
+              },
+              "pokedex": {
+                "type": "int",
+                "default": 58,
+                "description": "图鉴收集数门槛"
+              },
+              "title_id": {
+                "type": "int",
+                "default": 906,
+                "description": "对应称号ID（迁移047播种）"
+              },
+              "tax_discount": {
+                "type": "float",
+                "default": 0.08,
+                "description": "每日资产税折扣，0.10=减税10%"
+              },
+              "shop_discount": {
+                "type": "float",
+                "default": 0.05,
+                "description": "商店购买折扣，0.05=95折"
+              },
+              "wipe_bomb_bonus": {
+                "type": "int",
+                "default": 4,
+                "description": "每日擦弹次数加成"
+              }
+            }
+          },
+          "7": {
+            "type": "object",
+            "description": "7阶 钓鱼宗师",
+            "items": {
+              "level": {
+                "type": "int",
+                "default": 7,
+                "description": "阶级"
+              },
+              "name": {
+                "type": "string",
+                "default": "钓鱼宗师",
+                "description": "阶级名"
+              },
+              "fish_count": {
+                "type": "int",
+                "default": 5000,
+                "description": "累计钓鱼次数门槛"
+              },
+              "pokedex": {
+                "type": "int",
+                "default": 74,
+                "description": "图鉴收集数门槛"
+              },
+              "title_id": {
+                "type": "int",
+                "default": 907,
+                "description": "对应称号ID（迁移047播种）"
+              },
+              "tax_discount": {
+                "type": "float",
+                "default": 0.1,
+                "description": "每日资产税折扣，0.10=减税10%"
+              },
+              "shop_discount": {
+                "type": "float",
+                "default": 0.06,
+                "description": "商店购买折扣，0.05=95折"
+              },
+              "wipe_bomb_bonus": {
+                "type": "int",
+                "default": 5,
+                "description": "每日擦弹次数加成"
+              }
+            }
+          },
+          "8": {
+            "type": "object",
+            "description": "8阶 传说钓者",
+            "items": {
+              "level": {
+                "type": "int",
+                "default": 8,
+                "description": "阶级"
+              },
+              "name": {
+                "type": "string",
+                "default": "传说钓者",
+                "description": "阶级名"
+              },
+              "fish_count": {
+                "type": "int",
+                "default": 9000,
+                "description": "累计钓鱼次数门槛"
+              },
+              "pokedex": {
+                "type": "int",
+                "default": 90,
+                "description": "图鉴收集数门槛"
+              },
+              "title_id": {
+                "type": "int",
+                "default": 908,
+                "description": "对应称号ID（迁移047播种）"
+              },
+              "tax_discount": {
+                "type": "float",
+                "default": 0.12,
+                "description": "每日资产税折扣，0.10=减税10%"
+              },
+              "shop_discount": {
+                "type": "float",
+                "default": 0.08,
+                "description": "商店购买折扣，0.05=95折"
+              },
+              "wipe_bomb_bonus": {
+                "type": "int",
+                "default": 6,
+                "description": "每日擦弹次数加成"
+              }
+            }
+          },
+          "9": {
+            "type": "object",
+            "description": "9阶 钓神",
+            "items": {
+              "level": {
+                "type": "int",
+                "default": 9,
+                "description": "阶级"
+              },
+              "name": {
+                "type": "string",
+                "default": "钓神",
+                "description": "阶级名"
+              },
+              "fish_count": {
+                "type": "int",
+                "default": 15000,
+                "description": "累计钓鱼次数门槛"
+              },
+              "pokedex": {
+                "type": "int",
+                "default": 102,
+                "description": "图鉴收集数门槛"
+              },
+              "title_id": {
+                "type": "int",
+                "default": 909,
+                "description": "对应称号ID（迁移047播种）"
+              },
+              "tax_discount": {
+                "type": "float",
+                "default": 0.15,
+                "description": "每日资产税折扣，0.10=减税10%"
+              },
+              "shop_discount": {
+                "type": "float",
+                "default": 0.1,
+                "description": "商店购买折扣，0.05=95折"
+              },
+              "wipe_bomb_bonus": {
+                "type": "int",
+                "default": 8,
+                "description": "每日擦弹次数加成"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "refine": {
     "description": "装备精炼系统配置",
     "type": "object",

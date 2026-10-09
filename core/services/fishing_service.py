@@ -33,6 +33,7 @@ class FishingService:
         buff_repo: AbstractUserBuffRepository,
         fishing_zone_service: FishingZoneService,
         config: Dict[str, Any],
+        fishing_class_service=None,
     ):
         self.user_repo = user_repo
         self.inventory_repo = inventory_repo
@@ -41,6 +42,8 @@ class FishingService:
         self.buff_repo = buff_repo
         self.fishing_zone_service = fishing_zone_service
         self.config = config
+        # 钓鱼阶级服务（可选依赖，为 None 时阶级系统自动跳过，不影响主流程）
+        self.fishing_class_service = fishing_class_service
 
         # 获取每日刷新时间配置
         self.daily_reset_hour = self.config.get("daily_reset_hour", 0)
@@ -493,8 +496,26 @@ class FishingService:
         # 添加装备损坏消息
         if equipment_broken_messages:
             result["equipment_broken_messages"] = equipment_broken_messages
-        
+
+        # 8. 检查阶级晋升（只有次数跨过下一阶门槛时才会查图鉴，见服务内两级短路）
+        promotion = self._check_class_promotion(user_id)
+        if promotion:
+            result["class_promotion"] = promotion
+
         return result
+
+    def _check_class_promotion(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """调用阶级服务检查晋升；阶级系统未装配时静默跳过，绝不因阶级逻辑中断钓鱼。"""
+        if not self.fishing_class_service:
+            return None
+        try:
+            outcome = self.fishing_class_service.check_promotion(user_id)
+        except Exception as e:
+            logger.warning(f"[阶级] 用户 {user_id} 晋升检查异常（已忽略）: {e}")
+            return None
+        if not outcome or not outcome.get("promoted"):
+            return None
+        return outcome
 
     def get_user_pokedex(self, user_id: str) -> Dict[str, Any]:
         """获取用户的图鉴信息。"""
@@ -873,6 +894,16 @@ class FishingService:
                 tax_rate = min_rate + steps * step_rate
                 if tax_rate > max_rate:
                     tax_rate = max_rate
+
+            # 阶级特权：税收减免（在封顶之后按比例减免，最高 90%）
+            if tax_rate > 0 and self.fishing_class_service:
+                try:
+                    discount = self.fishing_class_service.get_tax_discount_for_user(user)
+                    if discount > 0:
+                        tax_rate = max(0.0, tax_rate * (1.0 - discount))
+                except Exception as e:
+                    logger.warning(f"[税收-{execution_id}] 读取用户 {user.user_id} 阶级折扣失败（按原价征收）: {e}")
+
             min_tax_amount = 1
             if tax_rate > 0:
                 tax_amount = max(int(user.coins * tax_rate), min_tax_amount)
@@ -1183,6 +1214,18 @@ class FishingService:
                             except Exception:
                                 # 通知失败不影响主流程
                                 pass
+                    # 自动钓鱼时也要推送阶级晋升，否则挂机玩家永远看不到自己升阶
+                    if result and result.get("class_promotion"):
+                        promo = result["class_promotion"]
+                        try:
+                            if self._notifier:
+                                self._notifier(
+                                    user_id,
+                                    f"🎖️ 阶级晋升！你已成为【{promo.get('name', '')}】（第 {promo.get('level')} 阶）",
+                                )
+                        except Exception:
+                            # 通知失败不影响主流程
+                            pass
                     # if result['success']:
                     #     fish = result["fish"]
                     #     logger.info(f"用户 {user_id} 自动钓鱼成功: {fish['name']}")

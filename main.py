@@ -36,6 +36,7 @@ from .core.services.fishing_zone_service import FishingZoneService
 from .core.services import item_effects
 from .core.services.exchange_service import ExchangeService # 新增交易所Service
 from .core.services.sicbo_service import SicboService # 新增骰宝Service
+from .core.services.fishing_class_service import FishingClassService # 新增钓鱼阶级Service
 from .core.services.red_packet_service import RedPacketService # 新增红包Service
 
 from .core.database.migration import run_migrations
@@ -135,14 +136,24 @@ class FishingPlugin(Star):
         # --- 3. 组合根：实例化所有服务层，并注入依赖 ---
         # 3.1 核心服务必须在效果管理器之前实例化，以解决依赖问题
         self.fishing_zone_service = FishingZoneService(self.item_template_repo, self.inventory_repo, self.game_config)
+        # 阶级服务需在 user / game_mechanics / shop / fishing 之前实例化：四者都依赖它的特权或称号发放
+        self.fishing_class_service = FishingClassService(
+            self.user_repo,
+            self.log_repo,
+            self.inventory_repo,
+            self.item_template_repo,
+            self.achievement_repo,
+            self.game_config,
+        )
         self.game_mechanics_service = GameMechanicsService(self.user_repo, self.log_repo, self.inventory_repo,
-                                                          self.item_template_repo, self.buff_repo, self.game_config)
+                                                          self.item_template_repo, self.buff_repo, self.game_config,
+                                                          self.fishing_class_service)
 
         # 3.3 实例化其他核心服务
         self.gacha_service = GachaService(self.gacha_repo, self.user_repo, self.inventory_repo, self.item_template_repo,
                                          self.log_repo, self.achievement_repo)
         # UserService 依赖 GachaService，因此在 GachaService 之后实例化
-        self.user_service = UserService(self.user_repo, self.log_repo, self.inventory_repo, self.item_template_repo, self.gacha_service, self.game_config, self.achievement_repo)
+        self.user_service = UserService(self.user_repo, self.log_repo, self.inventory_repo, self.item_template_repo, self.gacha_service, self.game_config, self.achievement_repo, self.fishing_class_service)
         self.inventory_service = InventoryService(
             self.inventory_repo,
             self.user_repo,
@@ -151,7 +162,8 @@ class FishingPlugin(Star):
             self.game_mechanics_service,
             self.game_config,
         )
-        self.shop_service = ShopService(self.item_template_repo, self.inventory_repo, self.user_repo, self.shop_repo, self.game_config)
+        self.shop_service = ShopService(self.item_template_repo, self.inventory_repo, self.user_repo, self.shop_repo,
+                                        self.game_config, self.fishing_class_service)
         # MarketService 依赖 exchange_repo
         self.market_service = MarketService(self.market_repo, self.inventory_repo, self.user_repo, self.log_repo,
                                            self.item_template_repo, self.exchange_repo, self.game_config)
@@ -165,6 +177,7 @@ class FishingPlugin(Star):
             self.buff_repo,
             self.fishing_zone_service,
             self.game_config,
+            self.fishing_class_service,
         )
         
         # 导入并初始化水族箱服务
@@ -410,6 +423,12 @@ class FishingPlugin(Star):
     async def sign_in(self, event: AstrMessageEvent):
         """每日签到领取奖励，连续签到奖励更丰厚"""
         async for r in common_handlers.sign_in(self, event):
+            yield r
+
+    @filter.command("阶级", alias={"钓鱼阶级", "我的阶级", "段位"})
+    async def fishing_class(self, event: AstrMessageEvent):
+        """查看你的钓鱼阶级、当前特权与下一阶进度"""
+        async for r in common_handlers.fishing_class(self, event):
             yield r
 
     @filter.command("自动钓鱼")

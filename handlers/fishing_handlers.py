@@ -45,8 +45,21 @@ def _build_fish_message(result, fishing_cost):
         if "equipment_broken_messages" in result:
             for broken_msg in result["equipment_broken_messages"]:
                 message += f"\n{broken_msg}"
+        if result.get("class_promotion"):
+            message += "\n" + _format_class_promotion(result["class_promotion"])
         return message
     return f"{result['message']}\n💸消耗：{fishing_cost} 金币/次"
+
+
+def _format_class_promotion(promotion) -> str:
+    """把晋升结果格式化为附加在钓鱼结果末尾的提示文案。"""
+    name = promotion.get("name") or ""
+    level = promotion.get("level")
+    titles = promotion.get("titles_granted") or []
+    text = f"🎖️ 阶级晋升！你已成为【{name}】（第 {level} 阶）"
+    if titles:
+        text += f"\n🏅 解锁称号：{'、'.join(titles)}"
+    return text
 
 
 class FishingHandlers:

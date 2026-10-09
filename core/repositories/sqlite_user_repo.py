@@ -103,6 +103,10 @@ class SqliteUserRepository(AbstractUserRepository):
             
             # --- [新功能] 添加交易所账户状态字段的读取 ---
             exchange_account_status=bool(row["exchange_account_status"]) if "exchange_account_status" in row_keys else False,
+
+            # --- [新功能] 钓鱼阶级系统字段（迁移 047）---
+            fishing_class_level=row["fishing_class_level"] if "fishing_class_level" in row_keys else 1,
+            fishing_class_score=row["fishing_class_score"] if "fishing_class_score" in row_keys else 0,
         )
 
     def get_by_id(self, user_id: str) -> Optional[User]:
