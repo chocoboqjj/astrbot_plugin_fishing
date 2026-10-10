@@ -283,6 +283,12 @@ DEFAULT_SELL_PRICES: Dict[str, Any] = {
     "by_rarity_8": 100000,
     "by_rarity_9": 200000,
     "by_rarity_10": 500000,
+    # 商店回购系数（防刷钱关键）
+    # 系统回购价 = min(按稀有度基准价 × 精炼倍率, 购买成本 × buyback_ratio)。
+    # 仅对「花金币从商店买入」的装备生效（模板 purchase_cost > 0），
+    # 防止「低价买入、按稀有度高价卖出」的无风险套利（如 1★新手木竿买50卖100 = 2倍印钞）。
+    # 0.6 = 商店六折回收，恒低于买入价，对 1-2 星尤为明显；非商店来源(purchase_cost=0/None)不受影响。
+    "buyback_ratio": 0.6,
 }
 
 # --- 精炼等级对应的售价倍率 ---
@@ -945,6 +951,11 @@ def build_game_config(config: Any) -> Dict[str, Any]:
             "rod": dict(rarity_prices),
             "accessory": dict(rarity_prices),
             "refine_multiplier": refine_multiplier,
+            # 商店回购系数：防「低买高卖」刷钱，必须随配置下发生效（否则只能吃 0.6 兜底默认值）
+            "buyback_ratio": coerce_float(
+                safe_get(sell_prices, "buyback_ratio", DEFAULT_SELL_PRICES["buyback_ratio"]),
+                0.6, minimum=0.0, maximum=1.0,
+            ),
         },
         "exchange": exchange_out,
     }

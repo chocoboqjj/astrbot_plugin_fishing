@@ -1792,6 +1792,13 @@
         "default": 500000,
         "description": "稀有度10的出售价格",
         "min": 0
+      },
+      "buyback_ratio": {
+        "type": "float",
+        "default": 0.6,
+        "description": "商店回购系数：系统回购价 = min(按稀有度基准价, 购买成本 × 此系数)。仅对花金币从商店买入的装备(purchase_cost>0)生效，防止低买高卖套利",
+        "min": 0.0,
+        "max": 1.0
       }
     }
   },

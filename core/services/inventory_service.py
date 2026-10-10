@@ -455,10 +455,13 @@ class InventoryService:
             if not rod_instance.is_locked and not rod_instance.is_equipped:
                 rod_template = self.item_template_repo.get_rod_by_id(rod_instance.rod_id)
                 if rod_template:
-                    # 计算售价（基础价格 × 精炼倍数）
-                    base_price = self.config["sell_prices"]["rod"].get(str(rod_template.rarity), 100)
-                    refine_multiplier = self.config["sell_prices"]["refine_multiplier"].get(str(rod_instance.refine_level), 1.0)
-                    rod_price = int(base_price * refine_multiplier)
+                    # 计算售价（统一走 calculate_sell_price，含商店回购上限防刷钱）
+                    rod_price = self.game_mechanics_service.calculate_sell_price(
+                        item_type="rod",
+                        rarity=rod_template.rarity,
+                        refine_level=rod_instance.refine_level,
+                        purchase_cost=getattr(rod_template, "purchase_cost", None),
+                    )
                     
                     total_value += rod_price
                     sold_items["rod_count"] += 1
@@ -474,10 +477,13 @@ class InventoryService:
             if not accessory_instance.is_locked and not accessory_instance.is_equipped:
                 accessory_template = self.item_template_repo.get_accessory_by_id(accessory_instance.accessory_id)
                 if accessory_template:
-                    # 计算售价（基础价格 × 精炼倍数）
-                    base_price = self.config["sell_prices"]["accessory"].get(str(accessory_template.rarity), 100)
-                    refine_multiplier = self.config["sell_prices"]["refine_multiplier"].get(str(accessory_instance.refine_level), 1.0)
-                    accessory_price = int(base_price * refine_multiplier)
+                    # 计算售价（统一走 calculate_sell_price，含商店回购上限防刷钱）
+                    accessory_price = self.game_mechanics_service.calculate_sell_price(
+                        item_type="accessory",
+                        rarity=accessory_template.rarity,
+                        refine_level=accessory_instance.refine_level,
+                        purchase_cost=getattr(accessory_template, "purchase_cost", None),
+                    )
                     
                     total_value += accessory_price
                     sold_items["accessory_count"] += 1
@@ -607,6 +613,7 @@ class InventoryService:
             item_type="rod",
             rarity=rod_template.rarity,
             refine_level=rod_to_sell.refine_level,
+            purchase_cost=getattr(rod_template, "purchase_cost", None),
         )
 
         # 4. 执行操作
@@ -646,6 +653,7 @@ class InventoryService:
                     item_type="rod",
                     rarity=rod_template.rarity,
                     refine_level=rod_instance.refine_level,
+                    purchase_cost=getattr(rod_template, "purchase_cost", None),
                 )
                 total_value += sell_price
                 rods_to_sell.append(rod_instance)
@@ -691,6 +699,7 @@ class InventoryService:
             item_type="accessory",
             rarity=accessory_template.rarity,
             refine_level=accessory_to_sell.refine_level,
+            purchase_cost=getattr(accessory_template, "purchase_cost", None),
         )
 
         # 4. 执行操作
@@ -728,6 +737,7 @@ class InventoryService:
                     item_type="accessory",
                     rarity=accessory_template.rarity,
                     refine_level=accessory_instance.refine_level,
+                    purchase_cost=getattr(accessory_template, "purchase_cost", None),
                 )
                 total_value += sell_price
                 accessories_to_sell.append(accessory_instance)

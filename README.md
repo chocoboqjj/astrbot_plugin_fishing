@@ -143,6 +143,14 @@
 - **UX 引导**：破产玩家在普通区钓不起时，`go_fish` 直接提示「💡 你已破产！可前往【救济港湾】(ID 5) 免费钓鱼恢复：/钓鱼区域 5」；`/钓鱼区域` 列表对救济区打 🆘（可进入）/ 🔒（不符合）标记。
 - **配置**：`relief_zone` 块（enabled / zone_id / coin_threshold）已加入 `config_defaults` 与 `_conf_schema.json`，运营可调；迁移 046 对存量库幂等补区域 5。
 
+**🐛 防刷钱：商店装备回购价封顶（低买高卖套利）**
+- **漏洞**：`calculate_sell_price` 按稀有度定固定卖价（1★=100 / 2★=500 / 3★=2000 …），与玩家「从商店花金币买入」的成本无关。商店竿 `purchase_cost` 远低于该价，且 `新手木竿`（`per_user_limit` 无限）买 50 卖 100，等于无风险 2 倍印钞机——玩家可无限批量买卖刷金币。
+- **修复**：回购价 = `min(按稀有度基准价 × 精炼倍率, 购买成本 × buyback_ratio)`，仅对 `purchase_cost > 0` 的**商店来源**装备生效；非商店来源（钓鱼 / 抽卡 / 活动，`purchase_cost = 0 或 None`）仍按稀有度全价，不受影响。
+  - `buyback_ratio` 默认 **0.6**（商店六折回收，恒低于买入价）。效果：新手木竿 买 50 → 卖 `min(100, 30) = 30`（每根净亏 20）；竹制竿 买 500 → 卖 `min(500, 300) = 300`（净亏）；碳素竿 买 5000 → 卖 2000（净亏）。所有商店竿现在**卖出必亏**，套利链路被彻底堵死。
+  - gacha 竿（星辰钓者 r4 / 海神之赐 r5，`purchase_cost=None`）照常按 5000 / 10000 全价回收，未误伤。
+- **全卖出路径统一封顶**：`sell_rod`（单竿）、`sell_accessory`（单饰品）、`sell_all_rods`、`sell_all_accessories`，以及「砸锅卖铁」(`sell_everything_except_locked`) 的鱼竿 / 饰品循环，已全部改为调用 `calculate_sell_price(..., purchase_cost=getattr(template, "purchase_cost", None))`，不再走旧的 `config["sell_prices"][type]` 直查（旧路径会绕过封顶）。
+- **配置下发**：`sell_prices.buyback_ratio` 已加入 `config_defaults`（`DEFAULT_SELL_PRICES`）与 `_conf_schema.json`（float，0.0~1.0），并在 `build_game_config` 装配时一并写入 `game_config["sell_prices"]`，运营可在 Web 后台调回购折扣（修复了此前该值未随配置下发、只能吃 0.6 兜底默认值的遗漏）。
+
 **🐛 Bug 修复**
 - **修复 `_row_to_user` 未读取阶级列**：导致晋升成功但读回回落为默认值（落库阶级不变），已同步读取 `fishing_class_level` / `fishing_class_score`
 - **修复商店购买数量展示错误**：单份商品发放多件（如「玉米粒」每份给 5 个）时，`_give_rewards` 按购买份数逐次追加展示字符串再 `set()` 去重，导致「获得物品」只显示单份数量（买 5 份显示 x5，实际进背包 25 个）；标题也只显示购买份数。现改为按「单份数量 × 购买份数」汇总真实发放总量：物品/鱼饵/鱼/金币显示 `x{单份×份数}`，标题对单奖励商品追加「（共获得 N）」，多奖励商品标题保持购买份数、明细行各自显示总量。

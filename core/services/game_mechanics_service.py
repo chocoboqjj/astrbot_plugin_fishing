@@ -1014,7 +1014,7 @@ class GameMechanicsService:
             "message": f"【{target.nickname}】{'有' if protection_buff else '没有'}海灵守护效果"
         }
 
-    def calculate_sell_price(self, item_type: str, rarity: int, refine_level: int) -> int:
+    def calculate_sell_price(self, item_type: str, rarity: int, refine_level: int, purchase_cost: Optional[int] = None) -> int:
         """
         计算物品的系统售价。
 
@@ -1022,12 +1022,14 @@ class GameMechanicsService:
             item_type: 物品类型 ('rod', 'accessory')
             rarity: 物品稀有度
             refine_level: 物品精炼等级
+            purchase_cost: 该物品「从商店花金币买入」时的成本（模板 purchase_cost）。
+                仅当此值 > 0 时启用回购上限，防止「低买高卖」套利。
 
         Returns:
             计算出的售价。
         """
         sell_price_config = self.config.get("sell_prices", {})
-        
+
         base_prices = sell_price_config.get(item_type, {})
         base_price = base_prices.get(str(rarity), 0)
 
@@ -1043,6 +1045,15 @@ class GameMechanicsService:
         refine_multiplier = refine_multipliers.get(str(refine_level), 1.0)
 
         final_price = int(base_price * refine_multiplier)
+
+        # 防刷钱：商店金币买入的装备，回购价不得高于「购买成本 × 回购系数」
+        # 例：1★新手木竿 买50 → 按稀有度卖100（2倍印钞）；改为 min(100, 50×0.6=30)=30，恒为亏损。
+        # 非商店来源（钓鱼/抽奖/活动，purchase_cost=0 或 None）不受影响，仍按稀有度计价。
+        if purchase_cost and int(purchase_cost) > 0:
+            buyback_ratio = float(sell_price_config.get("buyback_ratio", 0.6))
+            capped = int(int(purchase_cost) * buyback_ratio)
+            if capped < final_price:
+                final_price = capped
 
         # 确保最终价格至少为 30 金币（防止计算错误导致负值或零值）
         if final_price <= 0:
