@@ -61,7 +61,7 @@ class GameMechanicsService:
         "cooldown_seconds": 60,
         "timeout_seconds": 60,
         "levels": [
-            { "level": 1, "success_rate": 0.65, "multiplier": 1.55 },  # 高风险起点，期望微盈利0.75%
+            { "level": 1, "success_rate": 0.65, "multiplier": 1.50 },  # 起点即抽水：0.65×1.50=0.975<1（详见 audit_p2，与 config_defaults 保持一致）
             { "level": 2, "success_rate": 0.60, "multiplier": 1.45 },  # 开始亏损，防止稳赚
             { "level": 3, "success_rate": 0.55, "multiplier": 1.55 },  # 风险递增
             { "level": 4, "success_rate": 0.50, "multiplier": 1.70 },  # 中等风险
@@ -91,6 +91,9 @@ class GameMechanicsService:
         self.item_template_repo = item_template_repo
         self.buff_repo = buff_repo
         self.config = config
+        # 命运之轮配置：以 game_config["wheel_of_fate"] 为准（单一事实来源，来自 config_defaults /
+        # _conf_schema，可被运营调参），仅在 game_config 缺失该键时回退到类属性副本。
+        self.wheel_config = self.config.get("wheel_of_fate", self.WHEEL_OF_FATE_CONFIG)
         # 钓鱼阶级服务（可选依赖，为 None 时无阶级加成）
         self.fishing_class_service = fishing_class_service
         # 服务器级别的抑制状态
@@ -474,7 +477,7 @@ class GameMechanicsService:
         if not hasattr(user, 'in_wheel_of_fate') or not user.in_wheel_of_fate or not user.wof_last_action_time:
             return None
 
-        config = self.WHEEL_OF_FATE_CONFIG
+        config = self.wheel_config
         timeout_seconds = config.get("timeout_seconds", 60)
         now = get_now()
         
@@ -518,7 +521,7 @@ class GameMechanicsService:
             return {"success": False, "message": f"今天的运气已经用光啦！你今天已经玩了 {user.wof_plays_today}/{wheel_of_fate_daily_limit} 次命运之轮，请明天再来吧。"}
         # --- 限制逻辑结束 ---
 
-        config = self.WHEEL_OF_FATE_CONFIG
+        config = self.wheel_config
         min_fee = config.get("min_entry_fee", 500)
         max_fee = config.get("max_entry_fee", 50000)
         cooldown = config.get("cooldown_seconds", 60)
@@ -557,7 +560,7 @@ class GameMechanicsService:
         if not hasattr(user, 'in_wheel_of_fate') or not user.in_wheel_of_fate:
             return {"success": False, "status": "not_in_game", "message": "⚠️ 你当前不在命运之轮游戏中，无法继续。"}
 
-        config = self.WHEEL_OF_FATE_CONFIG
+        config = self.wheel_config
         levels = config.get("levels", [])
         
         next_level_index = user.wof_current_level

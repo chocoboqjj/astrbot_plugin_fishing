@@ -182,7 +182,9 @@ class UserService:
         coins_reward = random.randint(min_reward, max_reward)
 
         # 1. 增加金币和高级货币
-        premium_currency_reward = 1
+        # 读取配置项（与 _conf_schema / config_defaults 的 signin.premium_reward 单一事实来源对齐，
+        # 旧代码硬编码为 1，运营在后台调高该值会被静默忽略）
+        premium_currency_reward = signin_config.get("premium_reward", 1)
         user.coins += coins_reward
         user.premium_currency += premium_currency_reward 
 

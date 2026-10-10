@@ -381,7 +381,7 @@ async def start_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
     args = event.message_str.split(" ")
 
     if len(args) < 2:
-        config = self.game_mechanics_service.WHEEL_OF_FATE_CONFIG
+        config = self.game_mechanics_service.wheel_config
         min_fee = config.get("min_entry_fee", 500)
         max_fee = config.get("max_entry_fee", 50000)
         timeout = config.get("timeout_seconds", 60)
