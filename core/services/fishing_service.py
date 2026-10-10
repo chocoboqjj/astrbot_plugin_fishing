@@ -144,7 +144,17 @@ class FishingService:
         
         fishing_cost = zone.fishing_cost
         if not user.can_afford(fishing_cost):
-            return {"success": False, "message": f"金币不足，需要 {fishing_cost} 金币。"}
+            msg = f"金币不足，需要 {fishing_cost} 金币。"
+            # 破产救济区引导：若玩家有资格进入免费救济区，提示切换恢复
+            relief = self._get_relief_zone_config()
+            if relief["enabled"] and user.coins < relief["coin_threshold"]:
+                relief_zone = self.inventory_repo.get_zone_by_id(relief["zone_id"])
+                if relief_zone and relief_zone.is_active:
+                    msg += (
+                        f"\n💡 你已破产！可前往【{relief_zone.name}】(ID {relief['zone_id']}) "
+                        f"免费钓鱼恢复：/钓鱼区域 {relief['zone_id']}"
+                    )
+            return {"success": False, "message": msg}
 
         # 先扣除成本
         user.coins -= fishing_cost
@@ -617,7 +627,12 @@ class FishingService:
             if zone.requires_pass and zone.required_item_id:
                 item_template = self.item_template_repo.get_item_by_id(zone.required_item_id)
                 required_item_name = item_template.name if item_template else f"道具ID{zone.required_item_id}"
-            
+
+            # 破产救济区标记：仅当本区是救济区且玩家当前有资格进入
+            relief = self._get_relief_zone_config()
+            is_relief = bool(relief["enabled"] and zone.id == relief["zone_id"])
+            relief_eligible = bool(is_relief and user.coins < relief["coin_threshold"])
+
             zones_info.append({
                 "zone_id": zone.id,
                 "name": zone.name,
@@ -632,6 +647,8 @@ class FishingService:
                 "fishing_cost": zone.fishing_cost,
                 "available_from": zone.available_from,
                 "available_until": zone.available_until,
+                "is_relief": is_relief,
+                "relief_eligible": relief_eligible,
             })
 
         return {
@@ -779,6 +796,27 @@ class FishingService:
         # 从高稀有度中随机选择一个
         return random.choice(list(high_rarities))
 
+    def _get_relief_zone_config(self) -> Dict[str, Any]:
+        """读取破产救济区配置（带默认值，防止配置缺失导致判定异常）。"""
+        cfg = self.config.get("relief_zone", {}) if isinstance(self.config, dict) else {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        return {
+            "enabled": bool(cfg.get("enabled", True)),
+            "zone_id": int(cfg.get("zone_id", 5)),
+            "coin_threshold": max(0, int(cfg.get("coin_threshold", 100))),
+        }
+
+    def _relief_zone_eligible(self, user) -> bool:
+        """玩家当前是否有资格进入救济区（功能开启 + 金币低于阈值 + 区域存在且激活）。"""
+        cfg = self._get_relief_zone_config()
+        if not cfg["enabled"]:
+            return False
+        if user.coins >= cfg["coin_threshold"]:
+            return False
+        zone = self.inventory_repo.get_zone_by_id(cfg["zone_id"])
+        return bool(zone and zone.is_active)
+
     def set_user_fishing_zone(self, user_id: str, zone_id: int) -> Dict[str, Any]:
         """
         设置用户的钓鱼区域。
@@ -837,6 +875,18 @@ class FishingService:
             
             # 记录日志
             self.log_repo.add_log(user_id, "zone_entry", f"使用通行证进入 {zone.name}")
+
+        # 破产救济区门槛校验：仅金币低于阈值的玩家可进入，防止土豪白嫖刷钱
+        relief = self._get_relief_zone_config()
+        if relief["enabled"] and zone.id == relief["zone_id"]:
+            if user.coins >= relief["coin_threshold"]:
+                return {
+                    "success": False,
+                    "message": (
+                        f"❌ 救济区仅向破产玩家开放（金币需低于 {relief['coin_threshold']}）。\n"
+                        f"你当前有 {user.coins} 金币，请先去普通区域钓鱼恢复。"
+                    ),
+                }
 
         user.fishing_zone_id = zone.id
         self.user_repo.update(user)

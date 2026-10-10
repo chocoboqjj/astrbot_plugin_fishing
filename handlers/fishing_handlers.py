@@ -137,12 +137,20 @@ class FishingHandlers:
                     status_icons.append("🚫")
                 if zone.get("requires_pass"):
                     status_icons.append("🔑")
+                if zone.get("is_relief"):
+                    status_icons.append("🆘")
                 status_text = " ".join(status_icons) if status_icons else ""
                 message += (
                     f"区域名称: {zone['name']} (ID: {zone['zone_id']}) {status_text}\n"
                 )
                 message += f"描述: {zone['description']}\n"
                 message += f"💰 钓鱼消耗: {zone.get('fishing_cost', 10)} 金币/次\n"
+                if zone.get("is_relief"):
+                    threshold = self.plugin.game_config.get("relief_zone", {}).get("coin_threshold", 100)
+                    if zone.get("relief_eligible"):
+                        message += f"🆘 救济区：你当前可免费进入（金币低于 {threshold} 即可）\n"
+                    else:
+                        message += f"🔒 救济区：仅破产玩家（金币 < {threshold}）可进入，你暂不符合\n"
                 if zone.get("requires_pass"):
                     required_item_name = zone.get("required_item_name", "通行证")
                     message += f"🔑 需要 {required_item_name} 才能进入\n"

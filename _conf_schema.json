@@ -17,6 +17,32 @@
       }
     }
   },
+  "relief_zone": {
+    "description": "破产救济区（安全网）配置",
+    "type": "object",
+    "items": {
+      "enabled": {
+        "description": "是否启用救济区",
+        "type": "bool",
+        "hint": "开启后，金币低于阈值的破产玩家可进入免费救济区钓鱼恢复",
+        "default": true
+      },
+      "zone_id": {
+        "description": "救济区区域ID",
+        "type": "int",
+        "hint": "对应 fishing_zones 表中的救济区 id（迁移046创建的默认5）",
+        "default": 5,
+        "min": 1
+      },
+      "coin_threshold": {
+        "description": "进入救济区的金币上限阈值",
+        "type": "int",
+        "hint": "玩家金币低于此值才能进入救济区；恢复超过后禁止再进，必须回普通区",
+        "default": 100,
+        "min": 0
+      }
+    }
+  },
   "tax": {
     "description": "税收系统配置",
     "type": "object",
