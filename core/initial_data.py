@@ -278,7 +278,7 @@ ITEM_DATA = [
         1,
         "使用：获得 1000 金币。",
         0,
-        False,
+        True,
         None,
         "ADD_COINS",
         '{"amount": 1000}',
@@ -499,11 +499,11 @@ SHOP_DATA = [
     # 四店分工（每店只承担一种「消费决策」，避免玩家在杂货铺里翻找半天）：
     #   店1 海鸥港杂货铺   金币 · 基础消耗（鱼饵/基础道具）  常驻无限
     #   店2 七海珍宝阁     星石 · 装备与精炼保护（稀缺资源）  常驻限量
-    #   店3 黑潮交易所     金币 · 钱袋兑换（确定性收益）      每日限购
+    #   店3 黑潮交易所     金币 · 便利消耗品（不产金币，避免确定性刷钱）  每日限购
     #   店4 幽灵船黑市     金币 · 偷鱼对抗道具（社交博弈）    每日 21:00~04:00
     (1, "海鸥港杂货铺", "为水手们提供基础补给的杂货铺。", "normal", True, None, None, 100, None, None),
     (2, "七海珍宝阁", "传闻中收藏着来自七个海洋的奇珍异宝。", "premium", True, None, None, 200, None, None),
-    (3, "黑潮交易所", "用金币兑换确定收益的补给，深夜开门。", "normal", True, None, None, 300, "00:00", "23:59"),
+    (3, "黑潮交易所", "用金币换取便利消耗品，深夜开门（钱袋仅可抽卡获得）。", "normal", True, None, None, 300, "00:00", "23:59"),
     (4, "幽灵船黑市", "一艘神出鬼没的幽灵船，只在特定的时间出现。", "limited", True,
      None, None, 400, "21:00", "04:00"),
 ]
@@ -891,76 +891,39 @@ SHOP_ITEM_DATA = [
         "rewards": [("item", 5, 1, None, 0)],
     },
 
-    # ==================== 商店3：黑潮交易所（金币 · 钱袋兑换，每日限购）====================
-    # 定位：给不想刷鱼、想稳定拿金币的玩家一个确定出口。
-    # 定价锚点：购买成本 ≈ 4~6 次对应区域钓鱼的期望收益（区域1≈39 / 区域3≈960）。
-    # 所有商品设每日限购，保证它不会替代钓鱼（否则会击穿区域配额与税收调控）。
+    # ==================== 商店3：黑潮交易所（便利消耗品，非金币来源，每日限购）====================
+    # 定位：给愿意花金币买「便利」的玩家一个出口，但绝不直接出售金币/钱袋，避免确定性刷钱。
+    # 钱袋的获取改为仅限抽卡（每日补给池白给 小钱袋×2，见 GACHA_POOL_ITEMS[3]）。
+    # 下列消耗品均不产出金币，只提供功能性便利。
     {
         "shop_id": 3,
-        "name": "小钱袋",
-        "description": "一个装有少量金币的袋子。面值 1000",
-        "category": "money",
+        "name": "便携式声呐",
+        "description": "高科技产品，可立即执行一次钓鱼（跳过冷却）。",
+        "category": "consumable",
         "sort_order": 101,
         "per_user_daily_limit": 5,
-        # 成本 5000 ≈ 区域2 的 28 次收益，远高于面值，避免无脑刷
-        "costs": [("coins", 5000, None)],
-        "rewards": [("item", 1, 1, None, 0)],
+        "costs": [("coins", 3000, None)],
+        "rewards": [("item", 3, 1, None, 0)],
     },
     {
         "shop_id": 3,
-        "name": "中号钱袋",
-        "description": "一个沉甸甸的钱袋。面值 10000",
-        "category": "money",
+        "name": "擦弹许可证",
+        "description": "今天可用的擦弹次数增加 1 次。",
+        "category": "consumable",
         "sort_order": 102,
         "per_user_daily_limit": 3,
-        "costs": [("coins", 40000, None)],
-        "rewards": [("item", 7, 1, None, 0)],
+        "costs": [("coins", 5000, None)],
+        "rewards": [("item", 6, 1, None, 0)],
     },
     {
         "shop_id": 3,
-        "name": "神秘钱袋",
-        "description": "会变换重量的神秘钱袋，随机获得 5000~20000 金币",
-        "category": "money",
+        "name": "幸运药水",
+        "description": "10 分钟内，钓到稀有鱼的概率提升 5%。",
+        "category": "consumable",
         "sort_order": 103,
         "per_user_daily_limit": 3,
-        "costs": [("coins", 60000, None)],
-        "rewards": [("item", 9, 1, None, 0)],
-    },
-    {
-        "shop_id": 3,
-        "name": "大号钱袋",
-        "description": "一个鼓鼓囊囊的大钱袋。面值 50000",
-        "category": "money",
-        "sort_order": 104,
-        "per_user_daily_limit": 2,
-        "costs": [("coins", 180000, None)],
-        "rewards": [("item", 8, 1, None, 0)],
-    },
-    {
-        "shop_id": 3,
-        "name": "巨型钱袋",
-        "description": "仿佛装满了全世界财富的巨大袋子，随机获得 10万~50万 金币",
-        "category": "money",
-        "sort_order": 105,
-        "stock_total": 100,
-        "per_user_daily_limit": 1,
-        "costs": [("coins", 1200000, None)],
-        "rewards": [("item", 10, 1, None, 0)],
-    },
-    # 兑换礼包：给愿意花大钱的玩家一个打包价
-    {
-        "shop_id": 3,
-        "name": "囤货箱",
-        "description": "一次性购入多只钱袋，适合中后期囤积金币。限购 2 次",
-        "category": "money",
-        "sort_order": 201,
-        "per_user_limit": 2,
-        "per_user_daily_limit": 2,
-        "costs": [("coins", 1500000, None)],
-        "rewards": [
-            ("item", 8, 2, None, 0),
-            ("item", 9, 2, None, 0),
-        ],
+        "costs": [("coins", 8000, None)],
+        "rewards": [("item", 2, 1, None, 0)],
     },
 
     # ==================== 商店4：幽灵船黑市（偷鱼对抗道具，每日 21:00~04:00）====================
