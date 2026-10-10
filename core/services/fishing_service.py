@@ -863,9 +863,9 @@ class FishingService:
         logger.info(f"[税收-{execution_id}] 开始检查每日资产税（执行ID: {execution_id}）")
         
         # 兜底默认值必须与 core/config_defaults.DEFAULT_TAX_CONFIG 保持一致，
-        # 否则配置缺失时会回退到过时的 100万起征 / 20% 上限，
+        # 否则配置缺失时会回退到过时的数值，
         # 造成「平时没事、配置一缺就崩盘」的隐性 Bug。
-        threshold = tax_config.get("threshold", 10000000)
+        threshold = tax_config.get("threshold", 1000000)
         step_coins = tax_config.get("step_coins", 5000000)
         step_rate = tax_config.get("step_rate", 0.01)
         min_rate = tax_config.get("min_rate", 0.001)
