@@ -1,10 +1,11 @@
 import sqlite3
 import threading
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import date, datetime, timedelta, timezone
 # 导入抽象基类和领域模型
 from .abstract_repository import AbstractLogRepository
 from ..domain.models import FishingRecord, GachaRecord, WipeBombLog, TaxRecord, UserFishStat
+from astrbot.api import logger
 
 class SqliteLogRepository(AbstractLogRepository):
     """日志类数据仓储的SQLite实现"""
@@ -342,6 +343,87 @@ class SqliteLogRepository(AbstractLogRepository):
                 VALUES (?, ?, ?, ?, ?)
             """, (user_id, 0, 0.0, 0, datetime.now()))
             conn.commit()
+
+    # --- 金币交易流水（装备买卖溯源 / 刷钱精准追回） ---
+    def add_coin_transaction(
+        self,
+        user_id: str,
+        tx_type: str,
+        coins_delta: int,
+        item_type: Optional[str] = None,
+        item_id: Optional[int] = None,
+        rarity: Optional[int] = None,
+        quantity: int = 1,
+        balance_after: Optional[int] = None,
+    ) -> None:
+        """写入一条金币交易流水。coins_delta 正=收入，负=支出。异常隔离：失败只告警。"""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO coin_transactions
+                        (user_id, tx_type, item_type, item_id, rarity, quantity, coins_delta, balance_after)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (user_id, tx_type, item_type, item_id, rarity, quantity, int(coins_delta), balance_after),
+                )
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"[流水] 写入 coin_transactions 失败(user={user_id}, type={tx_type}): {e}")
+
+    def get_user_coin_transactions(
+        self, user_id: str, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """获取某用户的金币交易流水（按时间倒序）。"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, user_id, tx_type, item_type, item_id, rarity, quantity,
+                       coins_delta, balance_after, created_at
+                FROM coin_transactions
+                WHERE user_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (user_id, limit),
+            )
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    def sum_coin_delta(
+        self,
+        user_id: str,
+        tx_type: Optional[str] = None,
+        item_id: Optional[int] = None,
+        item_type: Optional[str] = None,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
+    ) -> int:
+        """汇总某用户的金币流水变动总额（可按 tx_type / item_id / item_type / 时间窗过滤）。"""
+        sql = "SELECT COALESCE(SUM(coins_delta), 0) FROM coin_transactions WHERE user_id = ?"
+        params: List[Any] = [user_id]
+        if tx_type is not None:
+            sql += " AND tx_type = ?"
+            params.append(tx_type)
+        if item_id is not None:
+            sql += " AND item_id = ?"
+            params.append(item_id)
+        if item_type is not None:
+            sql += " AND item_type = ?"
+            params.append(item_type)
+        if since is not None:
+            sql += " AND created_at >= ?"
+            params.append(since)
+        if until is not None:
+            sql += " AND created_at <= ?"
+            params.append(until)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
 
     # --- Tax Log Methods ---
     def add_tax_record(self, record: TaxRecord) -> None:

@@ -523,6 +523,42 @@ class AbstractLogRepository(ABC):
         """添加一条通用日志"""
         pass
 
+    # --- 金币交易流水（用于刷钱溯源与精准追回） ---
+    @abstractmethod
+    def add_coin_transaction(
+        self,
+        user_id: str,
+        tx_type: str,
+        coins_delta: int,
+        item_type: Optional[str] = None,
+        item_id: Optional[int] = None,
+        rarity: Optional[int] = None,
+        quantity: int = 1,
+        balance_after: Optional[int] = None,
+    ) -> None:
+        """写入一条金币交易流水（装备买卖溯源用）。coins_delta 正=收入，负=支出。"""
+        pass
+
+    @abstractmethod
+    def get_user_coin_transactions(
+        self, user_id: str, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """获取某用户的金币交易流水（按时间倒序）。"""
+        pass
+
+    @abstractmethod
+    def sum_coin_delta(
+        self,
+        user_id: str,
+        tx_type: Optional[str] = None,
+        item_id: Optional[int] = None,
+        item_type: Optional[str] = None,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
+    ) -> int:
+        """汇总某用户的金币流水变动总额（可按 tx_type / item_id / item_type / 时间窗过滤）。"""
+        pass
+
     # --- 用户鱼类统计（用于图鉴与个人纪录） ---
     @abstractmethod
     def get_user_fish_stats(self, user_id: str) -> List["UserFishStat"]:

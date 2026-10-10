@@ -12,6 +12,7 @@ from ..repositories.abstract_repository import (
     AbstractInventoryRepository,
     AbstractUserRepository,
     AbstractShopRepository,
+    AbstractLogRepository,
 )
 from ..domain.models import Shop, ShopItem, ShopItemCost, ShopItemReward
 
@@ -28,6 +29,7 @@ class ShopService:
         shop_repo: Optional[AbstractShopRepository] = None,
         config: Optional[Dict[str, Any]] = None,
         fishing_class_service=None,
+        log_repo: Optional[AbstractLogRepository] = None,
     ):
         self.item_template_repo = item_template_repo
         self.inventory_repo = inventory_repo
@@ -36,6 +38,8 @@ class ShopService:
         self.config = config or {}
         # 钓鱼阶级服务（可选依赖，为 None 时按原价结算）
         self.fishing_class_service = fishing_class_service
+        # 金币交易流水仓储（装备买卖溯源 / 刷钱精准追回）；为 None 时跳过记录
+        self.log_repo = log_repo
 
     def _parse_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
         """解析时间字符串为 datetime 对象"""
@@ -276,7 +280,31 @@ class ShopService:
         
         self.shop_repo.increase_item_sold(item_id, quantity)
         self.shop_repo.add_purchase_record(user_id, item_id, quantity)
-        
+
+        # --- 写金币交易流水（装备买卖溯源 / 刷钱精准追回）---
+        # 仅记录「花金币」的购买支出，并取产出中的 rod/accessory 模板 id 作为关联键，
+        # 使未来「某用户买 rod_id=1 再卖」的套利回路可被一条 SQL 汇总出来。
+        try:
+            if self.log_repo is not None:
+                coins_spent = int(final_total_costs.get("coins", 0) or 0)
+                if coins_spent > 0:
+                    buy_item_type = None
+                    buy_item_id = None
+                    for _r in (rewards or []):
+                        _rt = _r.get("reward_type")
+                        if _rt in ("rod", "accessory"):
+                            buy_item_type = _rt
+                            buy_item_id = _r.get("reward_item_id")
+                            break
+                    self.log_repo.add_coin_transaction(
+                        user_id, "shop_buy",
+                        coins_delta=-coins_spent,
+                        item_type=buy_item_type, item_id=buy_item_id,
+                        quantity=quantity, balance_after=getattr(user, "coins", None),
+                    )
+        except Exception as _e:
+            logger.warning(f"[流水] 购买流水记录失败(user={user_id}, item={item_id}): {_e}")
+
         success_message = f"✅ 购买成功：{item['name']} x{quantity}"
         # 单奖励商品：标题直接展示实际获得总量，避免「买5份×每份5个」却只显示 5
         if len(rewards) == 1:

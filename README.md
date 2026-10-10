@@ -151,6 +151,17 @@
 - **全卖出路径统一封顶**：`sell_rod`（单竿）、`sell_accessory`（单饰品）、`sell_all_rods`、`sell_all_accessories`，以及「砸锅卖铁」(`sell_everything_except_locked`) 的鱼竿 / 饰品循环，已全部改为调用 `calculate_sell_price(..., purchase_cost=getattr(template, "purchase_cost", None))`，不再走旧的 `config["sell_prices"][type]` 直查（旧路径会绕过封顶）。
 - **配置下发**：`sell_prices.buyback_ratio` 已加入 `config_defaults`（`DEFAULT_SELL_PRICES`）与 `_conf_schema.json`（float，0.0~1.0），并在 `build_game_config` 装配时一并写入 `game_config["sell_prices"]`，运营可在 Web 后台调回购折扣（修复了此前该值未随配置下发、只能吃 0.6 兜底默认值的遗漏）。
 
+**🐛 刷钱溯源：金币交易流水审计（治本，防未来再被刷）**
+- **背景**：上述买卖刷钱漏洞暴露一个根因——此前**所有金币增减都不写任何来源可追溯的流水**（`users.coins` 只被直接改写），导致事后既无法区分「刷出来的金币」与「正常所得」，也无法按来源追回。已刷的存量因无日志**无法精准归因**，故本次对该历史事件选择「不追溯」，但必须把溯源能力补上，避免以后再被动。
+- **新增 迁移 051**：`coin_transactions` 表（字段 `user_id / tx_type / item_type / item_id / rarity / quantity / coins_delta(正=收入,负=支出) / balance_after / created_at`）+ 3 个索引。幂等 `up`/`down`。
+- **买卖全埋点**：
+  - 买入：`ShopService.purchase_item` 花金币购买 `rod`/`accessory` 时写 `shop_buy` 流水，负值 `coins_delta`，并取产出的装备**模板 id** 作为关联键（如 `rod_id=1`）。
+  - 卖出：`sell_rod` / `sell_accessory` / `sell_all_rods` / `sell_all_accessories` / 「砸锅卖铁」(`sell_everything_except_locked`) 的鱼竿+饰品循环，均写 `sell_*` 流水，带 `item_id`/`rarity`/正值 `coins_delta`（逐件记录，便于按 `item_id` 汇总套利次数）。
+  - 流水写入做了**异常隔离**：日志失败只告警，不影响主交易（购买/卖出照常成功）。
+- **查询能力**：`LogRepository` 新增 `add_coin_transaction` / `get_user_coin_transactions` / `sum_coin_delta`（支持按 `tx_type`/`item_id`/`item_type`/时间窗过滤）。未来任何刷钱都可一句话汇总，例如：
+  `SUM(coins_delta) WHERE user_id=? AND tx_type IN ('sell_rod','sell_all_rods','sell_everything') AND item_id=1 AND item_type='rod'` = 某玩家靠卖新手木竿套出的金币总额；配合 `shop_buy` 的买入次数即可精准定量追回。
+- **范围说明**：本审计聚焦「装备买卖」这一套利面（鱼卖出于低频、非套利向量，未纳入以降低流水量）。
+
 **🐛 Bug 修复**
 - **修复 `_row_to_user` 未读取阶级列**：导致晋升成功但读回回落为默认值（落库阶级不变），已同步读取 `fishing_class_level` / `fishing_class_score`
 - **修复商店购买数量展示错误**：单份商品发放多件（如「玉米粒」每份给 5 个）时，`_give_rewards` 按购买份数逐次追加展示字符串再 `set()` 去重，导致「获得物品」只显示单份数量（买 5 份显示 x5，实际进背包 25 个）；标题也只显示购买份数。现改为按「单份数量 × 购买份数」汇总真实发放总量：物品/鱼饵/鱼/金币显示 `x{单份×份数}`，标题对单奖励商品追加「（共获得 N）」，多奖励商品标题保持购买份数、明细行各自显示总量。

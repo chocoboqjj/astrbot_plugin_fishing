@@ -161,9 +161,10 @@ class FishingPlugin(Star):
             None,  # 先设为None，稍后设置
             self.game_mechanics_service,
             self.game_config,
+            self.log_repo,
         )
         self.shop_service = ShopService(self.item_template_repo, self.inventory_repo, self.user_repo, self.shop_repo,
-                                        self.game_config, self.fishing_class_service)
+                                        self.game_config, self.fishing_class_service, self.log_repo)
         # MarketService 依赖 exchange_repo
         self.market_service = MarketService(self.market_repo, self.inventory_repo, self.user_repo, self.log_repo,
                                            self.item_template_repo, self.exchange_repo, self.game_config)

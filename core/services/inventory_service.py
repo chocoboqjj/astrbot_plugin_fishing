@@ -7,10 +7,12 @@ from ..repositories.abstract_repository import (
     AbstractInventoryRepository,
     AbstractUserRepository,
     AbstractItemTemplateRepository,
+    AbstractLogRepository,
 )
 from .effect_manager import EffectManager
 from ..utils import calculate_after_refine
 from .game_mechanics_service import GameMechanicsService
+from astrbot.api import logger
 
 
 class InventoryService:
@@ -24,6 +26,7 @@ class InventoryService:
         effect_manager: EffectManager,
         game_mechanics_service: GameMechanicsService,
         config: Dict[str, Any],
+        log_repo: Optional[AbstractLogRepository] = None,
     ):
         self.inventory_repo = inventory_repo
         self.user_repo = user_repo
@@ -31,6 +34,31 @@ class InventoryService:
         self.effect_manager = effect_manager
         self.game_mechanics_service = game_mechanics_service
         self.config = config
+        # 金币交易流水仓储（装备买卖溯源 / 刷钱精准追回）；为 None 时跳过记录
+        self.log_repo = log_repo
+
+    def _log_coin_tx(
+        self,
+        user_id: str,
+        tx_type: str,
+        item_type: str,
+        item_id: Optional[int],
+        rarity: Optional[int],
+        coins_delta: int,
+        quantity: int = 1,
+        balance_after: Optional[int] = None,
+    ) -> None:
+        """写入一条装备买卖金币流水（异常隔离：失败只告警，不影响主交易）。"""
+        if self.log_repo is None:
+            return
+        try:
+            self.log_repo.add_coin_transaction(
+                user_id, tx_type, coins_delta,
+                item_type=item_type, item_id=item_id, rarity=rarity,
+                quantity=quantity, balance_after=balance_after,
+            )
+        except Exception as e:
+            logger.warning(f"[流水] 卖出流水记录失败(user={user_id}, type={tx_type}): {e}")
 
     # === 短码解析 ===
     def _to_base36(self, n: int) -> str:
@@ -462,11 +490,15 @@ class InventoryService:
                         refine_level=rod_instance.refine_level,
                         purchase_cost=getattr(rod_template, "purchase_cost", None),
                     )
-                    
+
                     total_value += rod_price
                     sold_items["rod_count"] += 1
                     sold_items["rod_value"] += rod_price
-                    
+
+                    # 写流水（装备买卖溯源）：逐根记录，便于按 item_id 汇总套利次数
+                    self._log_coin_tx(user_id, "sell_everything", "rod", rod_template.rod_id,
+                                      rod_template.rarity, rod_price, 1, None)
+
                     # 删除鱼竿实例
                     self.inventory_repo.delete_rod_instance(rod_instance.rod_instance_id)
 
@@ -484,11 +516,15 @@ class InventoryService:
                         refine_level=accessory_instance.refine_level,
                         purchase_cost=getattr(accessory_template, "purchase_cost", None),
                     )
-                    
+
                     total_value += accessory_price
                     sold_items["accessory_count"] += 1
                     sold_items["accessory_value"] += accessory_price
-                    
+
+                    # 写流水（装备买卖溯源）
+                    self._log_coin_tx(user_id, "sell_everything", "accessory", accessory_template.accessory_id,
+                                      accessory_template.rarity, accessory_price, 1, None)
+
                     # 删除饰品实例
                     self.inventory_repo.delete_accessory_instance(accessory_instance.accessory_instance_id)
 
@@ -625,6 +661,10 @@ class InventoryService:
         user.coins += sell_price
         self.user_repo.update(user)
 
+        # 写流水（装备买卖溯源）
+        self._log_coin_tx(user_id, "sell_rod", "rod", rod_template.rod_id,
+                          rod_template.rarity, sell_price, 1, user.coins)
+
         return {"success": True, "message": f"成功出售鱼竿【{rod_template.name}】，获得 {sell_price} 金币"}
 
     def sell_all_rods(self, user_id: str) -> Dict[str, Any]:
@@ -657,6 +697,9 @@ class InventoryService:
                 )
                 total_value += sell_price
                 rods_to_sell.append(rod_instance)
+                # 写流水（装备买卖溯源）：逐根记录
+                self._log_coin_tx(user_id, "sell_all_rods", "rod", rod_template.rod_id,
+                                  rod_template.rarity, sell_price, 1, None)
         
         if total_value == 0:
             return {"success": False, "message": "❌ 没有可以卖出的鱼竿（已自动保留锁定、已装备或5星以上的鱼竿）"}
@@ -709,6 +752,9 @@ class InventoryService:
         self.inventory_repo.delete_accessory_instance(accessory_instance_id)
         user.coins += sell_price
         self.user_repo.update(user)
+        # 写流水（装备买卖溯源）
+        self._log_coin_tx(user_id, "sell_accessory", "accessory", accessory_template.accessory_id,
+                          accessory_template.rarity, sell_price, 1, user.coins)
         return {"success": True, "message": f"成功出售饰品【{accessory_template.name}】，获得 {sell_price} 金币"}
 
     def sell_all_accessories(self, user_id: str) -> Dict[str, Any]:
@@ -741,6 +787,9 @@ class InventoryService:
                 )
                 total_value += sell_price
                 accessories_to_sell.append(accessory_instance)
+                # 写流水（装备买卖溯源）：逐件记录
+                self._log_coin_tx(user_id, "sell_all_accessories", "accessory", accessory_template.accessory_id,
+                                  accessory_template.rarity, sell_price, 1, None)
 
         if total_value == 0:
             return {"success": False, "message": "❌ 没有可以卖出的饰品（已自动保留锁定、已装备或5星以上的饰品）"}
