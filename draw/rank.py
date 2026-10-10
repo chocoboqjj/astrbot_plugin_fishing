@@ -9,7 +9,7 @@ from .styles import (
     COLOR_BACKGROUND, COLOR_HEADER_BG, COLOR_TEXT_WHITE as COLOR_HEADER_TEXT,
     COLOR_CARD_BG, COLOR_CARD_BORDER, COLOR_TEXT_DARK,
     COLOR_ACCENT, COLOR_TEXT_GOLD, COLOR_TEXT_SILVER, COLOR_TEXT_BRONZE,
-    COLOR_FISH_COUNT, COLOR_COINS, load_font
+    COLOR_FISH_COUNT, COLOR_COINS, COLOR_RARE, load_font
 )
 
 def draw_rounded_rectangle(draw, xy, radius=10, fill=None, outline=None, width=1):
@@ -148,6 +148,8 @@ def draw_fishing_ranking(user_data: List[Dict], output_path: str, ranking_type: 
         accessory = user.get("accessory", "无饰品")
         # --- 新增：获取总重量数据 ---
         total_weight = user.get("total_weight_caught", 0)
+        # 钓鱼阶级名称
+        fishing_class = user.get("fishing_class", "")
 
         # 排名颜色
         rank_color = COLOR_TEXT_GOLD if idx == 0 else COLOR_TEXT_SILVER if idx == 1 else COLOR_TEXT_BRONZE if idx == 2 else COLOR_TEXT_DARK
@@ -247,6 +249,11 @@ def draw_fishing_ranking(user_data: List[Dict], output_path: str, ranking_type: 
                         break
                     temp_text = temp_text[:-1]
         # --- 修改结束 ---
+
+        # 钓鱼阶级信息（与 /状态、/阶级 命令同源，单一展示入口）
+        if fishing_class:
+            class_text = f"钓鱼阶级：{fishing_class}"
+            draw.text((name_x, bottom_line_y + 22), class_text, font=font_small, fill=COLOR_RARE)
 
         # 更新Y坐标
         current_y = card_y2 + USER_CARD_MARGIN

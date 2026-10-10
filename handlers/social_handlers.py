@@ -79,6 +79,18 @@ async def ranking(plugin: "FishingPlugin", event: AstrMessageEvent):
                 title_name = title_info.name
         user_dict["title"] = title_name
 
+        # 获取钓鱼阶级名称
+        fishing_class_name = ""
+        fcs = getattr(plugin, "fishing_class_service", None)
+        if fcs:
+            try:
+                ci = fcs.get_user_class_info(user_id)
+                if ci.get("success"):
+                    fishing_class_name = ci.get("name", "")
+            except Exception:
+                fishing_class_name = ""
+        user_dict["fishing_class"] = fishing_class_name
+
         # 确保重量字段存在，以防万一
         user_dict["total_weight_caught"] = user_dict.get("total_weight_caught", 0)
 

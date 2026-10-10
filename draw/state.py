@@ -148,7 +148,7 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
 
     # 用户基本信息卡片
     current_y = title_y + title_h + 15
-    card_height = 85
+    card_height = 110
     card_margin = 15
     
     # 用户信息卡片
@@ -219,6 +219,12 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
     total_fishing = user_data.get('total_fishing_count', 0)
     fishing_text = f"钓鱼次数: {total_fishing:,}"
     draw.text((col2_x, row2_y), fishing_text, font=small_font, fill=text_primary)
+
+    # 钓鱼阶级信息（与 /阶级 命令同源，单一展示入口）
+    fishing_class = user_data.get('fishing_class')
+    if fishing_class:
+        class_text = f"钓鱼阶级：{fishing_class.get('name', '')} · Lv.{fishing_class.get('level', 1)}"
+        draw.text((col1_x, current_y + 80), class_text, font=small_font, fill=primary_light)
 
     # 偷鱼总价值 - 调整列位置以均分 TODO
     # steal_total = user_data.get('steal_total_value', 0)
@@ -716,6 +722,20 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
         # 如果获取鱼塘信息失败，设置为默认值
         pond_info = {'total_count': 0, 'total_value': 0}
     
+    # 钓鱼阶级信息（用于状态面板展示）
+    fishing_class_info = None
+    if fishing_class_service is not None:
+        try:
+            ci = fishing_class_service.get_user_class_info(user_id)
+            if ci.get("success"):
+                fishing_class_info = {
+                    'level': ci.get('level', 1),
+                    'name': ci.get('name', ''),
+                    'score': ci.get('score', 0),
+                }
+        except Exception:
+            fishing_class_info = None
+    
     return {
         'user_id': user.user_id,
         'nickname': user.nickname or user.user_id,
@@ -735,4 +755,5 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
         'wipe_bomb_remaining': wipe_bomb_remaining,
         'pond_info': pond_info,
         'wof_remaining_plays': wof_remaining_plays,
+        'fishing_class': fishing_class_info,
     }
