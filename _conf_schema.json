@@ -1546,7 +1546,7 @@
         "items": {
           "1": {
             "type": "object",
-            "description": "第 1 关：成功率 0.65，成功倍率 1.55",
+            "description": "第 1 关：成功率 0.65，成功倍率 1.50（0.65×1.50=0.975<1，保证命运之轮为抽水而非印钞）",
             "items": {
               "success_rate": {
                 "type": "float",
@@ -1555,7 +1555,7 @@
               },
               "multiplier": {
                 "type": "float",
-                "default": 1.55,
+                "default": 1.50,
                 "description": "成功后本金倍率"
               }
             }

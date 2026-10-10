@@ -445,8 +445,12 @@ DEFAULT_WHEEL_OF_FATE_CONFIG: Dict[str, Any] = {
     "cooldown_seconds": 60,
     "timeout_seconds": 60,
     # 每关：成功率 / 成功倍率
+    # ⚠️ 设计约束：第 1 关必须满足 success_rate × multiplier ≤ 1，否则「过 1 关即提现」会成为
+    # 正 EV 的刷钱口（失败仅扣入场费、成功本金翻倍且可随时提现，结构本就偏玩家）。
+    # 1.55 → 1.50 后 0.65×1.50=0.975<1：最优策略退化为「不玩」(净 0)，任何实际参与的下注均为
+    # 负 EV（过 1 关提现约 -2.5%/次），命运之轮由轻微通胀水龙头转为抽水。详见 audit_p2。
     "levels": [
-        {"success_rate": 0.65, "multiplier": 1.55},
+        {"success_rate": 0.65, "multiplier": 1.50},
         {"success_rate": 0.60, "multiplier": 1.45},
         {"success_rate": 0.55, "multiplier": 1.55},
         {"success_rate": 0.50, "multiplier": 1.70},
