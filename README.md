@@ -165,6 +165,7 @@
 **🐛 Bug 修复**
 - **修复 `_row_to_user` 未读取阶级列**：导致晋升成功但读回回落为默认值（落库阶级不变），已同步读取 `fishing_class_level` / `fishing_class_score`
 - **修复商店购买数量展示错误**：单份商品发放多件（如「玉米粒」每份给 5 个）时，`_give_rewards` 按购买份数逐次追加展示字符串再 `set()` 去重，导致「获得物品」只显示单份数量（买 5 份显示 x5，实际进背包 25 个）；标题也只显示购买份数。现改为按「单份数量 × 购买份数」汇总真实发放总量：物品/鱼饵/鱼/金币显示 `x{单份×份数}`，标题对单奖励商品追加「（共获得 N）」，多奖励商品标题保持购买份数、明细行各自显示总量。
+- **修复精炼崩溃 `'list' object has no attribute 'get'`**：`_find_refinement_candidate` 把精炼成功率表 `success_rates`（按精炼等级索引的 `list`，index 0 = 1 级）误当成 `dict` 调用 `.get(target_level, 1.0)`，当玩家拥有 ≥2 个同类型装备（候选循环被触发）时必抛 `TypeError` 中断处理。已改为按等级索引：`success_rate = success_rates[target_level-1]`（带 `1 <= target_level <= len(success_rates)` 边界保护，越界回退 1.0）。同时清理了 `refine` 中 `return refine_result` 之后的一段**不可达死代码**（重复的毁坏机制旧逻辑）。`core/services/inventory_service.py` 的 `refine` / `_find_refinement_candidate` / `_get_refine_config_by_rarity` 已用 6 星位 × 逐等级索引 + 鱼竿/饰品随机成功失败 的回归脚本验证无异常。
 
 **👜 钱袋获取方式调整（设计修正）**
 - **问题**：店3（黑潮交易所）原本出售 小/中/神秘/大/巨型钱袋 + 囤货箱，售价约为面值 4~6 倍；玩家易误以为这是「买金币」出口，且确定性购买与「钱袋应靠抽取获得」的设计取向冲突。

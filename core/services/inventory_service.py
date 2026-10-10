@@ -1014,60 +1014,6 @@ class InventoryService:
         # 成功路径：直接返回结果，避免落入后续错误分支
         return refine_result
 
-        # 重构毁坏机制：根据稀有度调整毁坏概率
-        if instance.refine_level >= 6:
-            # 获取装备稀有度
-            rarity = template.rarity if hasattr(template, 'rarity') else 5
-            
-            # 根据稀有度设置毁坏概率：低星装备毁坏概率更低
-            if rarity <= 2:
-                destruction_chance = 0.1  # 1-2星：10%毁坏概率
-            elif rarity <= 4:
-                destruction_chance = 0.2  # 3-4星：20%毁坏概率
-            elif rarity <= 6:
-                destruction_chance = 0.25  # 5-6星：25%毁坏概率（降低了10%）
-            else:
-                destruction_chance = 0.4   # 7星+：40%毁坏概率（降低了10%）
-            
-            import random
-            if random.random() < destruction_chance:
-                # 根据稀有度设置保留概率：低星装备更容易保留
-                if rarity <= 2:
-                    survival_chance = 0.5  # 1-2星：50%概率保留
-                elif rarity <= 4:
-                    survival_chance = 0.3  # 3-4星：30%概率保留
-                else:
-                    survival_chance = 0.1  # 5星+：10%概率保留
-                
-                if random.random() < survival_chance:
-                    # 等级降1级，但保留装备
-                    instance.refine_level = max(1, instance.refine_level - 1)
-                    if item_type == "rod":
-                        self.inventory_repo.update_rod_instance(instance)
-                    else:  # accessory
-                        self.inventory_repo.update_accessory_instance(instance)
-                    
-                    return {
-                        "success": False,
-                        "message": f"💥 精炼失败！{item_name}等级降为 {instance.refine_level}，但装备得以保留！",
-                        "destroyed": False,
-                        "level_reduced": True,
-                        "new_refine_level": instance.refine_level
-                    }
-                else:
-                    # 完全毁坏装备
-                    if item_type == "rod":
-                        self.inventory_repo.delete_rod_instance(instance.rod_instance_id)
-                    else:  # accessory
-                        self.inventory_repo.delete_accessory_instance(instance.accessory_instance_id)
-                    
-                    return {
-                        "success": False,
-                        "message": f"💥 精炼失败！{item_name}在精炼过程中毁坏了！",
-                        "destroyed": True
-                    }
-
-
     def _get_refine_config_by_rarity(self, rarity: int, base_costs: dict) -> tuple:
         """
         根据装备稀有度获取精炼费用和成功率
@@ -1264,9 +1210,13 @@ class InventoryService:
                 continue
 
             # 检查成功率（如果提供了成功率表）
+            # success_rates 是按精炼等级索引的列表（index 0 = 1级）
             if success_rates:
                 target_level = new_refine_level
-                success_rate = success_rates.get(target_level, 1.0)
+                if 1 <= target_level <= len(success_rates):
+                    success_rate = success_rates[target_level - 1]
+                else:
+                    success_rate = 1.0
                 
                 import random
                 if random.random() > success_rate:
