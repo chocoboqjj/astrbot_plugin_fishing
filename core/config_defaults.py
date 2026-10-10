@@ -376,11 +376,11 @@ DEFAULT_ZONE_CONFIG: Dict[str, Any] = {
 # --- 破产救济区（安全网） ---
 # 设计意图：擦弹/税收等机制可能把玩家金币打到 0，而最便宜的普通区也要 10 金币，
 # 导致「0 金币 + 已签到 + 无物可卖」的玩家被临时卡死，只能等次日签到。
-# 救济区是一个 fishing_cost=0 的免费安全网（迁移 046 写入 fishing_zones，id 默认 5），
+# 救济区是一个 fishing_cost=0 的免费安全网（迁移 053 写入 fishing_zones，id 默认 5），
 # 仅产出 1-2 星小鱼，且**仅当玩家金币低于 coin_threshold 时才可进入**，
 # 恢复超过阈值后自动禁止再进 —— 既救急又不让土豪来白嫖刷钱。
 # ⚠️ 注意：本常量仅作「默认值镜像」，真实区域数值（费用/分布）在 fishing_zones 表里，
-#   由迁移 046 写入；这里的 zone_id / coin_threshold 只是救济区判定用的元数据。
+#   由迁移 053 写入；这里的 zone_id / coin_threshold 只是救济区判定用的元数据。
 DEFAULT_RELIEF_ZONE_CONFIG: Dict[str, Any] = {
     "enabled": True,
     "zone_id": 5,

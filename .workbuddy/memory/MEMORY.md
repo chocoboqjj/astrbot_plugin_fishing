@@ -24,6 +24,11 @@
 - 迁移脚本：`core/database/migrations/NNN_*.py`，由 `migration.py` **按文件路径**动态加载
   （早期用硬编码包路径 `data.plugins...` 会 ModuleNotFoundError，已修）。
   迁移中每个用到 `logger` 的函数都要**各自** `from astrbot.api import logger`（`up()` 有不代表 `down()` 有）。
+- **⚠️ 迁移版本号铁律（2026-10-10 踩坑）**：迁移文件名前缀 `NNN` **必须全局唯一**，新增迁移编号 = 当前最大编号 + 1。
+  `migration.py` 只执行 `version > current_version` 的迁移，且 `up()` 会把 `schema_version` 设成该迁移的版本号。
+  **两个迁移撞同一版本号 → 先跑的把版本顶上去，另一个（及同版本兄弟）被永久跳过**，表现为「代码写了但库里没数据」。
+  本次 `046_add_relief_zone`(建区域5) 与 `046_rebalance_equipment_bonus`(装备重平衡) 撞号 46，导致区域5 从未入库
+  （用户反馈「区域五没生效」）。已重编号为 052 / 053 修复。**新增迁移前务必 `ls core/database/migrations` 核对最大编号。**
 - 命令帮助图在 `draw/help.py`，改玩法/命令后必须同步（曾 11 轮未同步）。
 - 成就走 Python 类定义（`core/achievements/`）+ `user_achievement_progress` 表，无 `achievements` 表。
 

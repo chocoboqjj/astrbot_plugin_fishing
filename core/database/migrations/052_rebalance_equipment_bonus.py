@@ -1,5 +1,7 @@
 """
-迁移 046：重平衡装备加成曲线
+迁移 052：重平衡装备加成曲线
+
+（原编号 046，因与「新增救济区」迁移撞号导致互相跳过，重编号为 052 以修复冲突）
 
 背景（审计发现）
 ----------------
@@ -66,7 +68,7 @@ ACCESSORY_UPDATES = {
 
 
 def up(cursor: sqlite3.Cursor):
-    logger.info("正在执行 046_rebalance_equipment_bonus: 重平衡装备加成曲线...")
+    logger.info("正在执行 052_rebalance_equipment_bonus: 重平衡装备加成曲线...")
 
     for rod_id, (q, qt, rc) in ROD_UPDATES.items():
         cursor.execute(
@@ -101,7 +103,7 @@ def up(cursor: sqlite3.Cursor):
 
 
 def down(cursor: sqlite3.Cursor):
-    logger.info("正在回滚 046_rebalance_equipment_bonus...")
+    logger.info("正在回滚 052_rebalance_equipment_bonus...")
 
     rods_orig = {
         1: (1.00, 1.00, 0.00),

@@ -1,5 +1,8 @@
 """
-迁移 046：新增「救济港湾」破产安全网区域
+迁移 053：新增「救济港湾」破产安全网区域
+
+（原编号 046，因与「重平衡装备加成」迁移撞号导致互相跳过——
+本迁移的 up() 在开发库与部分实例中从未执行，救济区未入库。重编号为 053 修复冲突）
 
 背景
 ----
@@ -44,7 +47,7 @@ DAILY_QUOTA = 0
 
 
 def up(cursor: sqlite3.Cursor):
-    logger.info("正在执行 046_add_relief_zone: 新增破产救济区...")
+    logger.info("正在执行 053_add_relief_zone: 新增破产救济区...")
 
     # 幂等：区域 5 已存在则跳过，绝不覆盖管理员在后台做的调整
     cursor.execute("SELECT id FROM fishing_zones WHERE id = ?", (ZONE_ID,))
@@ -82,7 +85,7 @@ def up(cursor: sqlite3.Cursor):
 
 
 def down(cursor: sqlite3.Cursor):
-    logger.info("正在回滚 046_add_relief_zone...")
+    logger.info("正在回滚 053_add_relief_zone...")
     try:
         # 直接删除救济区（不影响 1-4 区，也不影响玩家数据；玩家若正停在该区会被 go_fish 自动送回区域一）
         cursor.execute("DELETE FROM fishing_zones WHERE id = ?", (ZONE_ID,))
