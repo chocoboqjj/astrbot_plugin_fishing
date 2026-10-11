@@ -519,7 +519,7 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
     Returns:
         包含用户状态信息的字典，如果用户不存在则返回None
     """
-    from ..core.utils import get_now, get_today
+    from ..core.utils import get_now, get_today, get_last_reset_time
     
     # 获取用户基本信息
     user = user_repo.get_by_id(user_id)
@@ -581,11 +581,19 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
     if user.fishing_zone_id:
         zone = inventory_repo.get_zone_by_id(user.fishing_zone_id)
         if zone:
+            # 稀有鱼配额已改为「人均每日」（迁移 054）：展示该玩家本刷新日的
+            # 4星+ 计数，日期键与全局 daily_reset_hour 刷新周期对齐。
+            _reset_hour = game_config.get("daily_reset_hour", 0) if isinstance(game_config, dict) else 0
+            try:
+                _date_key = get_last_reset_time(_reset_hour).strftime("%Y-%m-%d")
+                _used_rare = inventory_repo.get_user_daily_rare_count(user_id, _date_key, zone.id)
+            except Exception:
+                _used_rare = 0
             fishing_zone = {
                 'name': zone.name,
                 'description': zone.description,
                 'rare_fish_quota': zone.daily_rare_fish_quota if hasattr(zone, 'daily_rare_fish_quota') else 0,
-                'rare_fish_caught': zone.rare_fish_caught_today if hasattr(zone, 'rare_fish_caught_today') else 0
+                'rare_fish_caught': _used_rare
             }
     
     # 计算偷鱼剩余CD时间

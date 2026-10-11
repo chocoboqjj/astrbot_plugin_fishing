@@ -302,6 +302,18 @@ class AbstractInventoryRepository(ABC):
     @abstractmethod
     def get_all_zones(self) -> List[FishingZone]: pass
 
+    # 稀有鱼「人均每日配额」：获取某玩家某刷新日在某区已钓到的 4星+ 鱼数量
+    @abstractmethod
+    def get_user_daily_rare_count(self, user_id: str, date: str, zone_id: int) -> int: pass
+
+    # 稀有鱼「人均每日配额」：为某玩家某刷新日某区 +1（4星+ 渔获）
+    @abstractmethod
+    def increment_user_daily_rare_count(self, user_id: str, date: str, zone_id: int, delta: int = 1) -> None: pass
+
+    # 清空某刷新日所有玩家的稀有鱼用量（管理员「补充鱼池」），返回清空行数
+    @abstractmethod
+    def reset_all_user_daily_rare_count(self, date: str) -> int: pass
+
     @abstractmethod
     def update_zone_configs(self, zone_id: int, configs: str) -> None: pass
 

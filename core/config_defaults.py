@@ -364,13 +364,16 @@ DEFAULT_REFINE_CONFIG: Dict[str, Any] = {
 #   区域1 ≈ 39 金币/次  区域2 ≈ 175 金币/次  区域3 ≈ 960 金币/次
 # 费用 10 / 100 / 545 / 2130 使回本次数均为 0.1~0.3 次，钓鱼始终是正收益，符合放置游戏预期。
 DEFAULT_ZONE_CONFIG: Dict[str, Any] = {
-    "1": {"fishing_cost": 10, "daily_rare_fish_quota": 50},
-    # 稀有鱼配额说明：配额用于限制 4 星及以上鱼类的每日产出，防止通货膨胀。
+    "1": {"fishing_cost": 10, "daily_rare_fish_quota": 40},
+    # 稀有鱼配额说明（迁移 054）：配额用于限制**单个玩家每日**在该区钓到的
+    # 4 星及以上鱼类数量，作为宽松的防刷上限（正常玩家基本碰不到天花板，
+    # 稀缺感主要由各区基础稀有率承载）。
+    # ⚠️ 真实来源是 fishing_zones 表（迁移 054 写入）；此处仅为新装默认值镜像。
     # 费用与迁移 045 保持一致（10 / 100 / 545 / 2130），
     # 该梯度经实测使「每金币产出」严格递减（3.94 / 2.96 / 2.61 / 2.20）。
-    "2": {"fishing_cost": 100, "daily_rare_fish_quota": 200},
+    "2": {"fishing_cost": 100, "daily_rare_fish_quota": 60},
     "3": {"fishing_cost": 545, "daily_rare_fish_quota": 100},
-    "4": {"fishing_cost": 2130, "daily_rare_fish_quota": 30},
+    "4": {"fishing_cost": 2130, "daily_rare_fish_quota": 150},
 }
 
 # --- 破产救济区（安全网） ---

@@ -287,7 +287,10 @@ class FishingService:
         rarity_distribution = strategy.get_fish_rarity_distribution(user)
         
         zone = self.inventory_repo.get_zone_by_id(user.fishing_zone_id)
-        is_rare_fish_available = zone.rare_fish_caught_today < zone.daily_rare_fish_quota
+        # 稀有鱼配额为「人均每日」：按该玩家本刷新日已钓 4星+ 的数量判定，
+        # 而非区域全局计数（全局池会让人数一多就互相抢配额，见迁移 054）。
+        used_rare_quota = self._get_user_rare_quota_used(user.user_id, zone.id)
+        is_rare_fish_available = used_rare_quota < zone.daily_rare_fish_quota
         
         if not is_rare_fish_available:
             # 稀有鱼定义：4星及以上（包括5星和6+星组合）
@@ -420,11 +423,11 @@ class FishingService:
                 )
 
         if fish_template.rarity >= 4:
-            # 如果是4星及以上稀有鱼，增加用户的稀有鱼捕获计数
-            zone = self.inventory_repo.get_zone_by_id(user.fishing_zone_id)
-            if zone:
-                zone.rare_fish_caught_today += 1
-                self.inventory_repo.update_fishing_zone(zone)
+            # 4星及以上稀有鱼：累加该玩家本刷新日的稀有鱼计数（人均配额，见迁移 054）。
+            # 按实际入包条数 total_catches 计（数量加成会一次钓到多条，不能只记 1）。
+            self.inventory_repo.increment_user_daily_rare_count(
+                user.user_id, self._get_rare_quota_date_key(), user.fishing_zone_id, total_catches
+            )
 
         # 6. 更新数据库
         self.inventory_repo.add_fish_to_inventory(user.user_id, fish_template.fish_id, quantity=total_catches, quality_level=quality_level)
@@ -633,12 +636,18 @@ class FishingService:
             is_relief = bool(relief["enabled"] and zone.id == relief["zone_id"])
             relief_eligible = bool(is_relief and user.coins < relief["coin_threshold"])
 
+            # 稀有鱼配额已用量：改为展示「该玩家本刷新日」的计数（人均配额）
+            used_rare_quota = (
+                self._get_user_rare_quota_used(user.user_id, zone.id)
+                if zone.daily_rare_fish_quota > 0 else 0
+            )
+
             zones_info.append({
                 "zone_id": zone.id,
                 "name": zone.name,
                 "description": zone.description,
                 "daily_rare_fish_quota": zone.daily_rare_fish_quota,
-                "rare_fish_caught_today": zone.rare_fish_caught_today,
+                "rare_fish_caught_today": used_rare_quota,
                 "whether_in_use": zone.id == user.fishing_zone_id,
                 "is_active": zone.is_active,
                 "requires_pass": zone.requires_pass,
@@ -795,6 +804,21 @@ class FishingService:
             
         # 从高稀有度中随机选择一个
         return random.choice(list(high_rarities))
+
+    def _get_rare_quota_date_key(self) -> str:
+        """
+        稀有鱼「人均每日配额」的刷新日键（YYYY-MM-DD）。
+
+        与全局 daily_reset_hour 刷新周期对齐：跨过刷新点即进入新日、计数自动归零，
+        因此不需要额外的定时重置任务（迁移 054）。
+        """
+        return get_last_reset_time(self.daily_reset_hour).strftime("%Y-%m-%d")
+
+    def _get_user_rare_quota_used(self, user_id: str, zone_id: int) -> int:
+        """该玩家在指定区域、当前刷新日已钓到的 4星+ 鱼数量（人均配额已用量）。"""
+        return self.inventory_repo.get_user_daily_rare_count(
+            user_id, self._get_rare_quota_date_key(), zone_id
+        )
 
     def _get_relief_zone_config(self) -> Dict[str, Any]:
         """读取破产救济区配置（带默认值，防止配置缺失导致判定异常）。"""

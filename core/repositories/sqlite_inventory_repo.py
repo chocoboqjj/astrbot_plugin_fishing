@@ -470,6 +470,62 @@ class SqliteInventoryRepository(AbstractInventoryRepository):
             """, (zone.name, zone.description, zone.daily_rare_fish_quota, zone.rare_fish_caught_today, zone.id))
             conn.commit()
 
+    def get_user_daily_rare_count(self, user_id: str, date: str, zone_id: int) -> int:
+        """获取某玩家某刷新日在某区已钓到的 4星+ 鱼数量（人均配额判定用）。"""
+        with self._connection_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT rare_fish_count FROM user_daily_rare_fish
+                WHERE user_id = ? AND date = ? AND zone_id = ?
+                """,
+                (user_id, date, zone_id),
+            )
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    def increment_user_daily_rare_count(self, user_id: str, date: str, zone_id: int, delta: int = 1) -> None:
+        """为某玩家某刷新日某区累加 4星+ 渔获数（先 UPDATE，无行则 INSERT，兼容旧 SQLite）。"""
+        with self._connection_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE user_daily_rare_fish SET rare_fish_count = rare_fish_count + ?
+                WHERE user_id = ? AND date = ? AND zone_id = ?
+                """,
+                (delta, user_id, date, zone_id),
+            )
+            if cursor.rowcount == 0:
+                # 无历史行则新建（delta 恒为正，用它作为初始值）
+                cursor.execute(
+                    """
+                    INSERT INTO user_daily_rare_fish (user_id, date, zone_id, rare_fish_count)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(user_id, date, zone_id)
+                    DO UPDATE SET rare_fish_count = rare_fish_count + excluded.rare_fish_count
+                    """,
+                    (user_id, date, zone_id, max(delta, 0)),
+                )
+            conn.commit()
+
+    def reset_all_user_daily_rare_count(self, date: str) -> int:
+        """
+        清空某刷新日**所有玩家**的稀有鱼用量（管理员「补充鱼池」用）。
+        配额已改为按玩家计，故需清整张当日表而非区域全局计数。
+        返回被清空的行数。
+        """
+        with self._connection_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM user_daily_rare_fish WHERE date = ?", (date,)
+            )
+            deleted = cursor.rowcount or 0
+            conn.commit()
+            # 兼容旧的全局计数器，一并归零
+            cursor.execute("UPDATE fishing_zones SET rare_fish_caught_today = 0")
+            conn.commit()
+            return deleted
+
     def get_all_zones(self) -> List[FishingZone]:
         """获取所有钓鱼区域信息"""
         with self._connection_manager.get_connection() as conn:
