@@ -503,39 +503,61 @@ class FishingPlugin(Star):
         async for r in method(event):
             yield r
 
-    async def _send_qq_keyboard(self, event: AstrMessageEvent, text: str, kb_json: str) -> bool:
-        """best-effort：通过 botpy 客户端给官方 Bot 消息附加键盘。任意失败均降级返回 False。"""
+    async def _send_qq_keyboard(self, event: AstrMessageEvent, text: str, kb: "Optional[dict]" = None) -> bool:
+        """
+        best-effort：通过 botpy 原生 HTTP 接口给官方 Bot 消息附加键盘按钮。
+
+        关键修复：botpy 的 post_group_message(..., keyboard=...) 封装会注入大量 null 字段，
+        导致 QQ 接口校验失败（invalid content），从而按钮永不渲染。改为直接调用 botpy 的
+        HTTP 路由 bot.api._http.request(route, json=payload)，仅携带最小字段。该方式已验证
+        可正常渲染按钮（参考 astrbot_plugin_keyword）。
+
+        键盘必须挂在 msg_type=2 的 markdown 消息上。任意失败均降级返回 False（由调用方回退纯文本）。
+        """
         try:
-            raw = event.message_obj.raw_message
-            api = event.bot.api
-            # 构造 botpy Keyboard 对象（qq_official 平台下 botpy 必然可用）
-            try:
-                from botpy.types.message import Keyboard
-                keyboard_arg = Keyboard(id="", content=kb_json)
-            except Exception:
+            import botpy.message
+            from botpy.http import Route
+            from botpy.types.message import MarkdownPayload
+        except Exception:
+            return False
+
+        bot = getattr(event, "bot", None)
+        if bot is None or getattr(bot, "api", None) is None:
+            return False
+        raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
+        if raw is None:
+            return False
+
+        content = text or "\u200b"  # QQ 键盘消息要求 markdown content 非空，空则用零宽占位
+        msg_id = getattr(raw, "id", None)
+        try:
+            payload: dict = {
+                "msg_type": 2,  # 2 = markdown 消息（键盘必须挂 markdown）
+                "markdown": MarkdownPayload(content=content),
+                "msg_id": msg_id,
+            }
+            if kb is not None:
+                payload["keyboard"] = kb
+
+            if isinstance(raw, botpy.message.GroupMessage):
+                payload["msg_seq"] = 1
+                route = Route(
+                    "POST",
+                    "/v2/groups/{group_openid}/messages",
+                    group_openid=raw.group_openid,
+                )
+            elif isinstance(raw, botpy.message.C2CMessage):
+                payload["msg_seq"] = 1
+                route = Route(
+                    "POST",
+                    "/v2/users/{openid}/messages",
+                    openid=raw.author.user_openid,
+                )
+            else:
                 return False
 
-            import random
-            group_openid = getattr(raw, "group_openid", None)
-            if group_openid:
-                await api.post_group_message(
-                    group_openid=group_openid,
-                    content=text,
-                    msg_id=event.message_obj.message_id,
-                    msg_seq=random.randint(1, 10000),
-                    keyboard=keyboard_arg,
-                )
-                return True
-
-            author = getattr(raw, "author", None)
-            user_openid = getattr(author, "user_openid", None) if author else None
-            if user_openid and hasattr(event, "post_c2c_message"):
-                await event.post_c2c_message(
-                    openid=user_openid,
-                    content=text,
-                    keyboard=keyboard_arg,
-                )
-                return True
+            await bot.api._http.request(route, json=payload)
+            return True
         except Exception as e:
             logger.warning(f"[菜单] 官方Bot键盘发送失败，降级为纯文本：{e}")
         return False

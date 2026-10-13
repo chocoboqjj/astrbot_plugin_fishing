@@ -25,10 +25,19 @@
   `utils.find_mentioned_user_id` 必须：跳过 `qq_official` 哨兵 + 文本正则匹配字母数字 openid +
   群消息约定「@机器人 @目标」取最后一个为目标。曾因只匹配 `[0-9]+` 且未跳过哨兵导致 @指令失效（已修）。
 - **平台硬限制（插件无法修）**：qq_official 不支持 Reply 段 → 回复无法引用原消息；At 已由文本解析绕过，@人可用。
-- **⚠️ qq_official 不渲染 Button 组件（2026-10-13 踩坑）**：AstrBot `qq_official` 适配器 `_post_send`/`_parse_to_qqofficial`
-  只处理 Plain/Image/Record，Button 组件被 `else: 忽略` 丢弃。要做原生按钮必须走 botpy 键盘 API
-  （`event.bot.api.post_group_message(group_openid=..., content=..., keyboard=Keyboard(id="",content=json))`，
-  按钮 `action.type=2`+`enter=true` 点击即把指令发回机器人）。该路径须 `hasattr(event,"bot")` 且 try/except 降级为纯文本。
+- **⚠️ qq_official 原生按钮（2026-10-13 踩坑→修复）**：AstrBot `qq_official` 适配器 `_post_send`/`_parse_to_qqofficial`
+  只处理 Plain/Image/Record，Button 组件被 `else: 忽略` 丢弃。原生按钮必须走 botpy 键盘 API。
+  **致命坑**：botpy 的 `post_group_message(..., keyboard=...)` 封装会注入大量 `null` 字段 → QQ 接口报 `invalid content`
+  → 按钮永不渲染、被静默降级为纯文本（日志只有一行 `[菜单] 官方Bot键盘发送失败…` WARNING）。
+  **正确做法（已验证，对照 `astrbot_plugin_keyword`）**：直接调 botpy 原生 HTTP 路由
+  `await event.bot.api._http.request(route, json=payload)`，最小字段：
+  `payload = {"msg_type":2, "markdown":{"content":文本}, "msg_id":源消息id, "keyboard":{...}, "msg_seq":1}`；
+  群消息 `Route("POST","/v2/groups/{group_openid}/messages", group_openid=...)`，
+  C2C `Route("POST","/v2/users/{openid}/messages", openid=raw.author.user_openid)`。
+  键盘按钮 `action.type=2`+`permission.type=2`+`data="/指令"`+`at_bot_show_channel_list=False`+`enter=True`
+  （`enter` 不在 botpy 的 Action TypedDict 里，但走 raw JSON 会被转发；不支持时按钮仍会填入输入框）。
+  官方 Bot **无需额外后台配置**，按钮能否出现只取决于发送路径是否正确。代码见 `main.py::_send_qq_keyboard`、
+  `core/menu.py::build_qq_keyboard`，发送为 best-effort，异常降级纯文本。
 
 ## 项目结构要点
 - 配置单一事实来源：`core/config_defaults.py`（`build_game_config()` 做容错与区间修正）

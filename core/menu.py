@@ -56,38 +56,47 @@ def get_menu_method(index: int) -> Optional[str]:
     return None
 
 
-def build_qq_keyboard() -> Optional[str]:
+def build_qq_keyboard() -> "Optional[dict]":
     """
-    构造 QQ 官方 Bot 键盘 JSON 字符串（best-effort）。
+    构造 QQ 官方 Bot 键盘 payload（dict，直接挂到 markdown 消息的 keyboard 字段）。
 
-    按钮 action.type=2 + enter=true：点击后把 data（指令文本）作为消息发给机器人，
-    由 AstrBot 正常分发执行，等同用户手打该指令。失败返回 None。
+    按钮 action.type=2（输入框按钮）+ enter=true（点击后把 data 作为消息自动发送），
+    由 AstrBot 正常分发执行，等同用户手打该指令；即便接口不支持 enter，也至少会把
+    指令填入输入框，玩家无需手打。
+
+    返回 {"content": {"rows": [...]}}；失败时返回 None。
+    结构对齐已验证可在 qq_official 上渲染的 astrbot_plugin_keyword 实现：
+    键盘必须挂在 msg_type=2 的 markdown 消息上，且走 botpy 原生 HTTP 路由
+    （bot.api._http.request）才能避免 botpy 封装注入的 null 字段导致接口校验失败。
     """
     try:
-        import json
-
         rows: List[Dict] = []
+        button_id = 0
         for i in range(0, len(MENU_ITEMS), _BUTTONS_PER_ROW):
             buttons = []
-            for j, item in enumerate(MENU_ITEMS[i : i + _BUTTONS_PER_ROW]):
+            for item in MENU_ITEMS[i : i + _BUTTONS_PER_ROW]:
+                button_id += 1
+                label = item["label"]
+                if len(label) > 30:
+                    label = label[:30] + "…"
                 buttons.append(
                     {
-                        "id": str(len(rows) * _BUTTONS_PER_ROW + j + 1),
+                        "id": str(button_id),
                         "render_data": {
-                            "label": item["label"],
-                            "visited_label": item["label"],
-                            "style": 1,  # 1=蓝（主按钮）
+                            "label": label,
+                            "visited_label": label,
+                            "style": 0,  # 0=灰（次按钮），1=蓝（主按钮）
                         },
                         "action": {
-                            "type": 2,  # 回调并发送
-                            "permission": {"type": 1},  # 所有人可点
-                            "data": "/" + item["cmd"],
-                            "enter": True,  # 点击后把 data 作为消息发送
-                            "reply": False,
+                            "type": 2,  # 输入框按钮
+                            "permission": {"type": 2},  # 所有人可点
+                            "data": "/" + item["cmd"],  # 点击/自动发送的内容
+                            "at_bot_show_channel_list": False,  # 不弹 @bot 频道列表，直接填充 data
+                            "enter": True,  # 点击后把 data 作为消息自动发送（等同手打并回车）
                         },
                     }
                 )
             rows.append({"buttons": buttons})
-        return json.dumps({"rows": rows}, ensure_ascii=False)
+        return {"content": {"rows": rows}}
     except Exception:
         return None

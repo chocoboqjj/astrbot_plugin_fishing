@@ -156,8 +156,14 @@
   已内置去掉官方 Bot 的 `@bot` 前缀（`<@!openid> /选 2` 也能正确解析）。
 - 面板收录 10 个高频无参指令：钓鱼 / 签到 / 状态 / 背包 / 商店 / 市场 / 抽卡 / 鱼塘 / 排行榜 / 鱼类图鉴。
 - **实现说明**：AstrBot 的 `qq_official` 适配器 `_post_send` 只处理 Plain/Image/Record，**会丢弃 Button 消息组件**，
-  故原生按钮必须走 botpy 键盘 API（`event.bot.api.post_group_message(..., keyboard=...)`）。该路径为
-  best-effort，任意异常均降级为纯文本菜单，不影响其它功能。
+  故原生按钮必须走 botpy 键盘 API。关键坑：botpy 的 `post_group_message(..., keyboard=...)` 封装会注入大量
+  `null` 字段，导致 QQ 接口校验失败（`invalid content`），按钮**永不渲染**且被静默降级为纯文本。正确做法是直接调用
+  botpy 原生 HTTP 路由 `event.bot.api._http.request(route, json=payload)`，只带最小字段：
+  - `payload = {"msg_type": 2, "markdown": {"content": 文本}, "msg_id": 源消息id, "keyboard": {...}, "msg_seq": 1}`
+  - 群消息路由 `POST /v2/groups/{group_openid}/messages`；私聊(C2C)路由 `POST /v2/users/{openid}/messages`
+  - 该方式已对照可正常渲染按钮的 `astrbot_plugin_keyword` 实现验证。（官方 Bot **无需额外后台配置**，按钮能否出现
+    只取决于发送路径是否正确。）
+  - 该发送为 best-effort，任意异常均降级为纯文本菜单，不影响其它功能。
 
 
 **🎖️ 新功能：钓鱼阶级系统（段位制 · 纯增益型）**
