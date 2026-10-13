@@ -25,6 +25,10 @@
   `utils.find_mentioned_user_id` 必须：跳过 `qq_official` 哨兵 + 文本正则匹配字母数字 openid +
   群消息约定「@机器人 @目标」取最后一个为目标。曾因只匹配 `[0-9]+` 且未跳过哨兵导致 @指令失效（已修）。
 - **平台硬限制（插件无法修）**：qq_official 不支持 Reply 段 → 回复无法引用原消息；At 已由文本解析绕过，@人可用。
+- **⚠️ qq_official 不渲染 Button 组件（2026-10-13 踩坑）**：AstrBot `qq_official` 适配器 `_post_send`/`_parse_to_qqofficial`
+  只处理 Plain/Image/Record，Button 组件被 `else: 忽略` 丢弃。要做原生按钮必须走 botpy 键盘 API
+  （`event.bot.api.post_group_message(group_openid=..., content=..., keyboard=Keyboard(id="",content=json))`，
+  按钮 `action.type=2`+`enter=true` 点击即把指令发回机器人）。该路径须 `hasattr(event,"bot")` 且 try/except 降级为纯文本。
 
 ## 项目结构要点
 - 配置单一事实来源：`core/config_defaults.py`（`build_game_config()` 做容错与区间修正）

@@ -456,6 +456,90 @@ class FishingPlugin(Star):
         async for r in common_handlers.fishing_help(self, event):
             yield r
 
+    # =========== 快捷面板（交互优化） ===========
+
+    @filter.command("面板", alias={"快捷菜单", "功能菜单", "快捷面板"})
+    async def quick_menu(self, event: AstrMessageEvent):
+        """打开钓鱼快捷面板：QQ 官方 Bot 下点按钮即可执行常用指令；其它平台用 /选 N"""
+        from .core.menu import build_menu_text, build_qq_keyboard
+        text = build_menu_text()
+        kb = build_qq_keyboard()
+        sent = False
+        # 仅在 QQ 官方 Bot 下尝试发送原生键盘按钮
+        platform_name = getattr(getattr(event, "platform_meta", None), "platform_name", "")
+        if kb and platform_name == "qq_official" and hasattr(event, "bot"):
+            sent = await self._send_qq_keyboard(event, text, kb)
+        if not sent:
+            yield event.plain_result(text)
+
+    @filter.command("选", alias={"快捷选", "m"})
+    async def quick_select(self, event: AstrMessageEvent):
+        """从快捷面板选择第 N 项执行，例如 /选 1（见 /面板）"""
+        from .core.menu import MENU_ITEMS, get_menu_cmd, get_menu_method
+        import re
+        arg = (event.message_str or "").strip()
+        # 去掉官方 Bot 可能残留的 @bot 前缀（<@!openid> 或 @机器人）
+        arg = re.sub(r"^<@!?[A-Za-z0-9_-]+>\s*", "", arg).strip()
+        arg = re.sub(r"^@\S+\s*", "", arg).strip()
+        # 去掉命令前缀，仅保留序号
+        for prefix in ("/选", "/快捷选", "/m", "选", "m"):
+            if arg.startswith(prefix):
+                arg = arg[len(prefix):].strip()
+                break
+        if not arg.isdigit():
+            yield event.plain_result("用法：/选 <序号>，例如 /选 1 开始钓鱼。先发 /面板 查看编号。")
+            return
+        idx = int(arg)
+        cmd = get_menu_cmd(idx)
+        method_name = get_menu_method(idx)
+        if not cmd or not method_name:
+            yield event.plain_result(f"序号 {idx} 超出范围，请发 /面板 查看可用项（共 {len(MENU_ITEMS)} 项）。")
+            return
+        method = getattr(self, method_name, None)
+        if method is None:
+            yield event.plain_result("⚠️ 该指令暂不可通过面板执行，请直接发送 /" + cmd)
+            return
+        yield event.plain_result(f"⚡ 执行：/{cmd}")
+        async for r in method(event):
+            yield r
+
+    async def _send_qq_keyboard(self, event: AstrMessageEvent, text: str, kb_json: str) -> bool:
+        """best-effort：通过 botpy 客户端给官方 Bot 消息附加键盘。任意失败均降级返回 False。"""
+        try:
+            raw = event.message_obj.raw_message
+            api = event.bot.api
+            # 构造 botpy Keyboard 对象（qq_official 平台下 botpy 必然可用）
+            try:
+                from botpy.types.message import Keyboard
+                keyboard_arg = Keyboard(id="", content=kb_json)
+            except Exception:
+                return False
+
+            import random
+            group_openid = getattr(raw, "group_openid", None)
+            if group_openid:
+                await api.post_group_message(
+                    group_openid=group_openid,
+                    content=text,
+                    msg_id=event.message_obj.message_id,
+                    msg_seq=random.randint(1, 10000),
+                    keyboard=keyboard_arg,
+                )
+                return True
+
+            author = getattr(raw, "author", None)
+            user_openid = getattr(author, "user_openid", None) if author else None
+            if user_openid and hasattr(event, "post_c2c_message"):
+                await event.post_c2c_message(
+                    openid=user_openid,
+                    content=text,
+                    keyboard=keyboard_arg,
+                )
+                return True
+        except Exception as e:
+            logger.warning(f"[菜单] 官方Bot键盘发送失败，降级为纯文本：{e}")
+        return False
+
     # =========== 背包与资产 ==========
 
     @filter.command("背包", alias={"查看背包", "我的背包"})
