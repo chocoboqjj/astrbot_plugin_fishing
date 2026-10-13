@@ -383,41 +383,68 @@ def find_mentioned_user_id(event) -> Optional[str]:
     """
     从事件中提取被 @ 的用户 ID（跨平台兼容）。
 
-    兼容要点：
-    1. 遍历消息链找 At 组件，字段名 qq/user_id/uid/id 逐一尝试；
-    2. 排除机器人自身；
-    3. 部分平台（如 QQ 官方 Bot）不产出 At 组件，此时回退到从消息文本里
-       解析 CQ 码 / <@!xxx> / <@xxx> 形式的 @ 标记。
+    平台差异处理：
+    - aiocqhttp / NapCat：消息链带真实 At 组件（comp.qq = 真实 QQ 号），直接取即可；
+      文本里也可能残留 [CQ:at,qq=数字] 形式。
+    - QQ 官方 Bot (qq_official)：接收侧不产出真实 At 组件，AstrBot 仅注入一个
+      哨兵 At(qq="qq_official") 表示「机器人被 @」；真正的目标用户只以
+      <@!openid> / <@openid> 文本形式出现（openid 为字母数字串，非纯数字）。
+      群消息中触发命令必须先 @ 机器人，故文本里通常第一个 @ 是机器人自身，
+      真正要操作的目标用户是其余 @ 提及（约定 @机器人 @目标 顺序）。
     """
     message_obj = getattr(event, "message_obj", None)
     self_id = getattr(message_obj, "self_id", None)
+    # qq_official 群消息里 self_id 恒为 "unknown_selfid"，无法据此排除 bot 自身；
+    # 仅当 self_id 是真实 openid（频道/私聊场景）时才用于排除。
+    self_id_str = str(self_id) if self_id not in (None, "", "unknown_selfid") else ""
 
-    # 1) 优先从消息链的 At 组件取
+    # 1) 优先从消息链的 At 组件取（aiocqhttp / NapCat 等真实 At）
+    #    跳过 QQ 官方 Bot 的哨兵 At(qq="qq_official") 与机器人自身。
+    saw_qq_official_sentinel = False
     if message_obj is not None and hasattr(message_obj, "message"):
         try:
             for comp in message_obj.message:
                 if isinstance(comp, At):
                     at_id = _extract_at_user_id(comp)
-                    if at_id and str(at_id) != str(self_id):
+                    if at_id == "qq_official":
+                        saw_qq_official_sentinel = True
+                        continue
+                    if at_id and (not self_id_str or str(at_id) != self_id_str):
                         return at_id
-                else:
-                    # 非 At 组件但可能带 user_id 的平台实现（如某些 Reply/Node）
-                    at_id = _extract_at_user_id(comp)
-                    if at_id and str(at_id) != str(self_id):
-                        cls_name = type(comp).__name__
-                        if cls_name not in ("Image", "Record", "Video", "File", "Json"):
-                            return at_id
         except Exception:
             pass
 
-    # 2) 回退：从消息文本解析 @ 标记（QQ 官方 Bot 常见 <@!123456> / <@123456>）
+    # 2) 回退：从消息文本解析 @ 标记
     text = getattr(event, "message_str", "") or ""
     if text:
         import re as _re
-        for pat in (r"\[CQ:at[^\]]*?,?\s*qq=([0-9]+)", r"<@!\s*([0-9]+)\s*>", r"<@\s*([0-9]+)\s*>"):
-            m = _re.search(pat, text)
-            if m and m.group(1) != str(self_id):
-                return m.group(1)
+        # 收集所有 @ 提及（去重保序）。
+        #  - [CQ:at,qq=数字]       兼容 NapCat 残留文本
+        #  - <@!openid> / <@openid> 兼容 QQ 官方 Bot（openid 为字母数字串）
+        mentions: list[str] = []
+        for pat in (
+            r"\[CQ:at[^\]]*?,?\s*qq=([0-9]+)",
+            r"<@!\s*([A-Za-z0-9_-]+)\s*>",
+            r"<@\s*([A-Za-z0-9_-]+)\s*>",
+        ):
+            for m in _re.finditer(pat, text):
+                mid = m.group(1)
+                if mid == "qq_official" or (self_id_str and mid == self_id_str):
+                    continue
+                if mid not in mentions:
+                    mentions.append(mid)
+
+        if mentions:
+            if saw_qq_official_sentinel:
+                # QQ 官方 Bot：群消息里 bot 提及会保留在文本中占位，目标用户是其余 @。
+                # 约定「@机器人 @目标」顺序 → 取最后一个；仅 1 个且无法排除 bot 自身
+                # 时（群消息触发占位）视为无目标。
+                if len(mentions) >= 2:
+                    return mentions[-1]
+                # 仅 1 个：若 self_id 能排除 bot（频道/私聊已剥离 bot 提及）则为目标，
+                # 否则（群消息里是触发 bot 占位）视为无目标。
+                return mentions[0] if self_id_str else None
+            return mentions[0]
 
     return None
 

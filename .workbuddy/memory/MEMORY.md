@@ -15,6 +15,16 @@
   同一平台任意群/私聊注册过则处处提示已注册。玩家侧无「注销」命令，删号只能走 Web 后台
   （`user_service.delete_user_for_admin`）。
 - `MARKET` 是系统虚拟用户（market_service 自动创建，用于托管上架装备），出现在 users 表属正常。
+- **⚠️ 平台切换账号不兼容（2026-10-13 踩坑）**：NapCat(aiocqhttp) 下 `get_sender_id()` 返回纯数字 QQ 号；
+  QQ 官方 Bot(qq_official) 下返回 **openid**（字母数字串，如 `nhB9vRr...`），二者格式不同且**无映射**，
+  旧 `fish.db`（存 QQ 号）在官方 Bot 下全部查不到 → 玩家显示「未注册」。切官方 Bot 需清空 `fish.db` 重注册。
+- **QQ 官方 Bot 接入方式（框架层，非插件代码）**：AstrBot 面板 → 机器人 → +创建 → QQ 官方机器人(WebSocket)
+  → 填 appid/secret → **务必勾 `enable_group_c2c`**（否则收不到群消息）→ QQ开放平台加 IP 白名单。
+- **@人解析（qq_official 关键坑）**：官方 Bot 接收侧不产真实 At，AstrBot 注入哨兵 `At(qq="qq_official")`，
+  目标用户只在 `message_str` 里以 `<@!openid>` 文本出现（字母数字，非纯数字）。
+  `utils.find_mentioned_user_id` 必须：跳过 `qq_official` 哨兵 + 文本正则匹配字母数字 openid +
+  群消息约定「@机器人 @目标」取最后一个为目标。曾因只匹配 `[0-9]+` 且未跳过哨兵导致 @指令失效（已修）。
+- **平台硬限制（插件无法修）**：qq_official 不支持 Reply 段 → 回复无法引用原消息；At 已由文本解析绕过，@人可用。
 
 ## 项目结构要点
 - 配置单一事实来源：`core/config_defaults.py`（`build_game_config()` 做容错与区间修正）
