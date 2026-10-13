@@ -1,10 +1,9 @@
 import os
 import time
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.message.components import At
 from astrbot.api import logger
 from ..draw.rank import draw_fishing_ranking
-from ..utils import parse_target_user_id
+from ..utils import parse_target_user_id, find_mentioned_user_id
 
 from typing import TYPE_CHECKING
 
@@ -111,14 +110,8 @@ async def ranking(plugin: "FishingPlugin", event: AstrMessageEvent):
 async def steal_fish(plugin: "FishingPlugin", event: AstrMessageEvent):
     """偷鱼功能"""
     user_id = plugin._get_effective_user_id(event)
-    message_obj = event.message_obj
-    target_id = None
-    if hasattr(message_obj, "message"):
-        for comp in message_obj.message:
-            if isinstance(comp, At):
-                if comp.qq != message_obj.self_id:
-                    target_id = str(comp.qq)
-                    break
+    # @人解析走跨平台兼容实现（兼容 qq/user_id/uid 字段与 <@!xxx> 文本形式）
+    target_id = find_mentioned_user_id(event)
 
     if target_id is None:
         parts = event.message_str.strip().split()
@@ -150,15 +143,8 @@ async def electric_fish(plugin: "FishingPlugin", event: AstrMessageEvent):
         return
     
     user_id = plugin._get_effective_user_id(event)
-    message_obj = event.message_obj
-    target_id = None
-    if hasattr(message_obj, "message"):
-        for comp in message_obj.message:
-            if isinstance(comp, At):
-                # 排除机器人本身的id
-                if comp.qq != message_obj.self_id:
-                    target_id = str(comp.qq)
-                    break
+    # @人解析走跨平台兼容实现（兼容 qq/user_id/uid 字段与 <@!xxx> 文本形式）
+    target_id = find_mentioned_user_id(event)
 
     if target_id is None:
         parts = event.message_str.strip().split()

@@ -364,6 +364,64 @@ def safe_get_file_path(handler_instance, filename: str) -> str:
     return os.path.join(handler_instance.tmp_dir, safe_filename)
 
 
+def _extract_at_user_id(comp) -> Optional[str]:
+    """
+    从一个 At 组件中尽可能提取用户 ID（兼容各平台字段差异）。
+
+    AstrBot 官方 At 组件定义为 (qq, name)，但不同平台/协议落地时字段名可能不同
+    （如 QQ 官方 Bot、OneBot 变体等会出现 user_id / uid / id）。
+    这里按优先级逐个尝试，避免因字段名差异导致 @人 解析失败。
+    """
+    for attr in ("qq", "user_id", "uid", "id"):
+        val = getattr(comp, attr, None)
+        if val not in (None, "", 0, "0"):
+            return str(val)
+    return None
+
+
+def find_mentioned_user_id(event) -> Optional[str]:
+    """
+    从事件中提取被 @ 的用户 ID（跨平台兼容）。
+
+    兼容要点：
+    1. 遍历消息链找 At 组件，字段名 qq/user_id/uid/id 逐一尝试；
+    2. 排除机器人自身；
+    3. 部分平台（如 QQ 官方 Bot）不产出 At 组件，此时回退到从消息文本里
+       解析 CQ 码 / <@!xxx> / <@xxx> 形式的 @ 标记。
+    """
+    message_obj = getattr(event, "message_obj", None)
+    self_id = getattr(message_obj, "self_id", None)
+
+    # 1) 优先从消息链的 At 组件取
+    if message_obj is not None and hasattr(message_obj, "message"):
+        try:
+            for comp in message_obj.message:
+                if isinstance(comp, At):
+                    at_id = _extract_at_user_id(comp)
+                    if at_id and str(at_id) != str(self_id):
+                        return at_id
+                else:
+                    # 非 At 组件但可能带 user_id 的平台实现（如某些 Reply/Node）
+                    at_id = _extract_at_user_id(comp)
+                    if at_id and str(at_id) != str(self_id):
+                        cls_name = type(comp).__name__
+                        if cls_name not in ("Image", "Record", "Video", "File", "Json"):
+                            return at_id
+        except Exception:
+            pass
+
+    # 2) 回退：从消息文本解析 @ 标记（QQ 官方 Bot 常见 <@!123456> / <@123456>）
+    text = getattr(event, "message_str", "") or ""
+    if text:
+        import re as _re
+        for pat in (r"\[CQ:at[^\]]*?,?\s*qq=([0-9]+)", r"<@!\s*([0-9]+)\s*>", r"<@\s*([0-9]+)\s*>"):
+            m = _re.search(pat, text)
+            if m and m.group(1) != str(self_id):
+                return m.group(1)
+
+    return None
+
+
 def parse_target_user_id(event, args: list, arg_index: int = 1) -> Tuple[Optional[str], Optional[str]]:
     """解析目标用户ID，支持用户ID和@两种方式
     
@@ -386,28 +444,19 @@ def parse_target_user_id(event, args: list, arg_index: int = 1) -> Tuple[Optiona
         target_id, error = parse_target_user_id(event, ["/修改金币", "123456789", "1000"], 1)
         # 结果: target_id="123456789", error=None
     """
-    # 首先尝试从@中获取用户ID
-    message_obj = event.message_obj
-    target_id = None
-    if hasattr(message_obj, "message"):
-        # 检查消息中是否有At对象
-        for comp in message_obj.message:
-            if isinstance(comp, At):
-                # 排除机器人本身的id
-                if comp.qq != message_obj.self_id:
-                    target_id = str(comp.qq)
-                    break
-    
+    # 首先尝试从@中获取用户ID（跨平台兼容：兼容 qq/user_id/uid 等字段与 <@!xxx> 文本形式）
+    target_id = find_mentioned_user_id(event)
+
     # 如果从@中获取到了用户ID，直接返回
     if target_id is not None:
         return str(target_id), None
-    
+
     # 如果没有@，尝试从参数中获取
     if len(args) > arg_index:
         target_user_id = args[arg_index]
         # 接受任意字符串格式的 user_id（支持 QQ 纯数字和钉钉复杂字符串等各种平台）
         return target_user_id, None
-    
+
     # 如果既没有@也没有参数，返回错误
     return None, f"❌ 请指定目标用户（用户ID或@用户），例如：/命令 <用户ID> 或 /命令 @用户"
 

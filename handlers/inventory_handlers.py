@@ -1,7 +1,6 @@
 import os
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.core.message.components import At
-from ..utils import to_percentage, format_accessory_or_rod, format_rarity_display, parse_amount
+from ..utils import to_percentage, format_accessory_or_rod, format_rarity_display, parse_amount, find_mentioned_user_id
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -129,18 +128,7 @@ async def pond(plugin: "FishingPlugin", event: AstrMessageEvent):
 async def peek_pond(plugin: "FishingPlugin", event: AstrMessageEvent):
     """偷看他人鱼塘内的鱼"""
     user_id = plugin._get_effective_user_id(event)
-    message_obj = event.message_obj
-    target_user_id = None
-
-    # 首先尝试从@中获取用户ID
-    if hasattr(message_obj, "message"):
-        # 检查消息中是否有At对象
-        for comp in message_obj.message:
-            if isinstance(comp, At):
-                # 排除机器人本身的id
-                if comp.qq != message_obj.self_id:
-                    target_user_id = str(comp.qq)
-                    break
+    target_user_id = find_mentioned_user_id(event)
 
     # 如果没有@，尝试从消息文本中解析
     if target_user_id is None:
