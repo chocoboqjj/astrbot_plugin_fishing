@@ -1,18 +1,21 @@
 import os
 import hashlib
-from typing import Optional
+from typing import Optional, Any
 from PIL import Image, ImageDraw
 from astrbot.api import logger
 
-async def get_user_avatar(user_id: str, data_dir: str, avatar_size: int = 50) -> Optional[Image.Image]:
+async def get_user_avatar(user_id: str, data_dir: str, avatar_size: int = 50, event: Any = None) -> Optional[Image.Image]:
     """
     获取用户头像并处理为圆形
-    
+
     Args:
         user_id: 用户ID
         data_dir: 插件的数据目录
         avatar_size: 头像尺寸
-    
+        event: 可选，触发该渲染的消息事件。官方 Bot(qq_official) 下 user_id 为 openid（非 QQ 号），
+               无法用 qlogo 拉头像；传入 event 时会尝试调官方接口按 openid 取头像 URL。
+               其它平台或不需要官方头像时传 None 即可（仅 QQ 号用户能显示头像）。
+
     Returns:
         处理后的头像图像，如果失败返回None
     """
@@ -20,17 +23,17 @@ async def get_user_avatar(user_id: str, data_dir: str, avatar_size: int = 50) ->
         import aiohttp
         from io import BytesIO
         import time
-        
+
         # 创建头像缓存目录
         cache_dir = os.path.join(data_dir, "avatar_cache")
         os.makedirs(cache_dir, exist_ok=True)
-        
+
         # 安全化user_id用于文件名
         import re
         safe_user_id = re.sub(r'[^a-zA-Z0-9._-]', '_', user_id)
         safe_user_id = re.sub(r'_+', '_', safe_user_id).strip('_') or 'unknown'
         avatar_cache_path = os.path.join(cache_dir, f"{safe_user_id}_avatar.png")
-        
+
         # 检查是否有缓存的头像（24小时刷新）
         avatar_image = None
         if os.path.exists(avatar_cache_path):
@@ -40,18 +43,22 @@ async def get_user_avatar(user_id: str, data_dir: str, avatar_size: int = 50) ->
                     avatar_image = Image.open(avatar_cache_path).convert('RGBA')
             except:
                 pass
-        
+
         # 如果没有缓存或缓存过期，重新下载
         if avatar_image is None:
-            # 仅当 user_id 形如 QQ 号（纯数字、长度 5~12 位）时才尝试拉取 QQ 头像。
-            # 官方 Bot(qq_official) 等平台下 user_id 为 openid（字母数字串，如 nhB9vRr...），
-            # 并非 QQ 号，此时无法映射到 QQ 头像，直接跳过以免发起必败请求并刷 warning 日志。
-            if not user_id.isdigit() or not (5 <= len(user_id) <= 12):
-                logger.debug(f"user_id={user_id} 非 QQ 号（可能为官方Bot openid），跳过头像拉取。")
+            is_qq = user_id.isdigit() and (5 <= len(user_id) <= 12)
+            avatar_url = None
+            if is_qq:
+                # NapCat / 纯数字 QQ 号：直接走 qlogo
+                avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=640"
+            elif event is not None:
+                # 官方 Bot(openid) 等：尝试用官方接口按 openid 取头像 URL
+                avatar_url = await _resolve_official_avatar(event)
+            if not avatar_url:
+                logger.debug(f"user_id={user_id} 无法解析头像来源，跳过头像拉取。")
                 return None
-            avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=640"
             try:
-                # 增加超时时间并添加重试机制
+                # 增加超时时间
                 timeout = aiohttp.ClientTimeout(total=10, connect=5)
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.get(avatar_url) as response:
@@ -60,17 +67,79 @@ async def get_user_avatar(user_id: str, data_dir: str, avatar_size: int = 50) ->
                             avatar_image = Image.open(BytesIO(content)).convert('RGBA')
                             # 保存到缓存
                             avatar_image.save(avatar_cache_path, 'PNG')
+                        else:
+                            logger.debug(f"头像下载失败，HTTP {response.status}: {avatar_url}")
+                            return None
             except Exception as e:
-                # 如果下载失败，记录日志但不抛出异常
-                logger.warning(f"头像下载失败: {e}")
+                # QQ 号场景的网络异常值得关注；openid 解析失败的兜底已降级为 debug
+                if is_qq:
+                    logger.warning(f"头像下载失败: {e}")
+                else:
+                    logger.debug(f"头像下载失败: {e}")
                 return None
-        
+
         if avatar_image:
             return avatar_postprocess(avatar_image, avatar_size)
-        
+
     except Exception as e:
         pass
-    
+
+    return None
+
+
+async def _resolve_official_avatar(event: Any) -> Optional[str]:
+    """官方 Bot(qq_official) 下，依 openid 调官方接口取用户头像 URL。
+
+    仅当消息原始对象是 botpy 的 GroupMessage / C2CMessage（即官方 Bot 上下文）时才尝试；
+    其它平台、缺少 bot 客户端、或任何失败均返回 None，由调用方静默跳过（不显示头像）。
+    """
+    try:
+        import botpy.message  # noqa: F401
+        from botpy.http import Route
+    except Exception:
+        return None
+
+    bot = getattr(event, "bot", None)
+    if bot is None or getattr(bot, "api", None) is None:
+        return None
+    raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
+    if raw is None:
+        return None
+    author = getattr(raw, "author", None)
+    if author is None:
+        return None
+    openid = getattr(author, "user_openid", None)
+    if not openid:
+        return None
+
+    try:
+        if isinstance(raw, (botpy.message.GroupMessage, botpy.message.C2CMessage)):
+            # 官方接口「获取用户详情」按 openid 返回资料，含 avatar 字段
+            route = Route("GET", "/v2/users/{openid}", openid=openid)
+            data = await bot.api._http.request(route)
+            return _extract_avatar_from_userinfo(data)
+        return None
+    except Exception as e:
+        logger.debug(f"[头像] 官方Bot取头像URL失败：{e}")
+        return None
+
+
+def _extract_avatar_from_userinfo(data: Any) -> Optional[str]:
+    """从官方接口返回的用户/成员资料中稳健提取 avatar 字段（兼容不同返回结构）。"""
+    if not isinstance(data, dict):
+        return None
+    if isinstance(data.get("avatar"), str) and data["avatar"]:
+        return data["avatar"]
+    user = data.get("user")
+    if isinstance(user, dict) and isinstance(user.get("avatar"), str) and user["avatar"]:
+        return user["avatar"]
+    inner = data.get("data")
+    if isinstance(inner, dict):
+        if isinstance(inner.get("avatar"), str) and inner["avatar"]:
+            return inner["avatar"]
+        u = inner.get("user")
+        if isinstance(u, dict) and isinstance(u.get("avatar"), str) and u["avatar"]:
+            return u["avatar"]
     return None
 
 def avatar_postprocess(avatar_image: Image.Image, size: int) -> Image.Image:

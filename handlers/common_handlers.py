@@ -59,7 +59,7 @@ async def state(self: "FishingPlugin", event: AstrMessageEvent):
         yield event.plain_result('❌ 用户不存在，请先发送"注册"来开始游戏')
         return
     # 生成状态图像
-    image = await draw_state_image(user_data, self.data_dir)
+    image = await draw_state_image(user_data, self.data_dir, event=event)
     # 保存图像到临时文件
     image_path = os.path.join(self.tmp_dir, "user_status.png")
     image.save(image_path)

@@ -38,10 +38,14 @@
   （`enter` 不在 botpy 的 Action TypedDict 里，但走 raw JSON 会被转发；不支持时按钮仍会填入输入框）。
   官方 Bot **无需额外后台配置**，按钮能否出现只取决于发送路径是否正确。代码见 `main.py::_send_qq_keyboard`、
   `core/menu.py::build_qq_keyboard`，发送为 best-effort，异常降级纯文本。
-- **⚠️ QQ 头像按 QQ 号拉取（2026-10-14 踩坑→修复）**：`draw/utils.py::get_user_avatar` 把 `user_id` 拼进
-  `q4.qlogo.cn/headimg_dl?dst_uin={user_id}` 拉 QQ 头像。官方 Bot 下 `user_id` 是 openid（字母数字串）而非 QQ 号，
-  请求必败且每次刷 warning。已改为：仅当 `user_id.isdigit() and 5<=len<=12`（像 QQ 号）才发请求，否则静默跳过
-  （debug 日志、不报错），状态/背包/图鉴照常渲染（仅不显示头像）。NapCat 数字 QQ 号头像不受影响。
+- **⚠️ QQ 头像（2026-10-14 踩坑→修复→增强）**：`draw/utils.py::get_user_avatar(user_id, data_dir, avatar_size, event=None)`：
+  - NapCat 等**纯数字 QQ 号**（`user_id.isdigit() and 5<=len<=12`）→ 走 `q4.qlogo.cn/headimg_dl?dst_uin={user_id}`。
+  - **官方 Bot(openid)**：`user_id` 是 openid 而非 QQ 号，不能走 qlogo；但渲染时 handler 透传 `event`，
+    在非官方 Bot 上下文（消息原始对象为 botpy `GroupMessage`/`C2CMessage`）时，调官方接口
+    `GET /v2/users/{openid}` 取 `avatar` URL 再下载（24h 缓存；`_resolve_official_avatar` + `_extract_avatar_from_userinfo`，
+    后者兼容 `avatar` / `user.avatar` / `data.*` 多种返回结构）。
+  - 非官方 Bot / 无 `event` / 接口异常 → **静默降级**（debug 日志、不报错），状态/背包/图鉴照常渲染（仅不显示头像）。
+  - 调用链：`common_handlers`(状态) / `inventory_handlers`(背包) / `fishing_handlers`(图鉴) → `draw_state_image`/`draw_backpack_image`/`draw_pokedex` 均新增 `event=None` 并透传给 `get_user_avatar`。
 
 - **⚠️ 拟饵「是否消耗」看 `is_consumable`，不是 `duration_minutes`（2026-10-14 踩坑→修复）**：`fishing_service` 曾只按
   `duration_minutes==0` 判定「一次性鱼饵每次扣1」，导致亮片拟饵/大师拟饵（`is_consumable=False`「无消耗」但 `duration_minutes` 也=0）

@@ -228,6 +228,7 @@ class FishingHandlers:
                 output_path,
                 page=page,
                 data_dir=self.plugin.data_dir,
+                event=event,
             )
             yield event.image_result(output_path)
         except Exception as e:

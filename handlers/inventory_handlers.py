@@ -36,7 +36,7 @@ async def user_backpack(plugin: "FishingPlugin", event: AstrMessageEvent):
                 )
 
             # 生成背包图像
-            image = await draw_backpack_image(backpack_data, plugin.data_dir)
+            image = await draw_backpack_image(backpack_data, plugin.data_dir, event=event)
             # 保存图像到临时文件
             image_path = os.path.join(plugin.tmp_dir, "user_backpack.png")
             image.save(image_path)

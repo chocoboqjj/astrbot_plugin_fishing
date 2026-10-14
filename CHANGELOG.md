@@ -1,5 +1,15 @@
 # 📦 更新记录
 
+## v2.4.10 (官方 Bot 头像按 openid 拉取)
+- **✨ 官方 Bot(qq_official) 状态/背包/图鉴也能显示头像了**：上一版仅做到「非 QQ 号静默跳过」，官方 Bot 下头像仍空白。现改为——渲染时携带消息 `event`，在非 QQ 号（openid）且能取到官方 Bot 上下文时，**调官方接口 `GET /v2/users/{openid}` 取用户头像 URL** 再下载渲染。
+  - 仅在消息原始对象为 botpy `GroupMessage` / `C2CMessage`（即官方 Bot 上下文）时尝试；其它平台、缺少 bot 客户端、或接口异常均**静默降级**（debug 日志，不报错刷屏），卡片照常出。
+  - 头像 URL 提取做了兼容（直接 `avatar` / `user.avatar` / 包裹在 `data` 内），适配不同返回结构。
+  - 复用 `get_user_avatar` 的 24h 本地缓存：缓存命中时不打接口，避免每次 `/状态` 都请求。
+  - NapCat 等纯数字 QQ 号仍走 `qlogo.cn`，行为不变。
+  - 影响范围：`draw/utils.py::get_user_avatar`（新增 `event` 参数 + `_resolve_official_avatar` / `_extract_avatar_from_userinfo`），调用链 `common_handlers`(状态) / `inventory_handlers`(背包) / `fishing_handlers`(图鉴) → 三个绘图函数均透传 `event`。
+
+---
+
 ## v2.4.9 (官方 Bot 头像拉取兼容性修复)
 - **🐛 修复官方 Bot 下个人头像获取失败**：状态页 / 背包 / 图鉴卡均通过 `get_user_avatar` 按 `user_id` 从 `q4.qlogo.cn` 拉取 QQ 头像。官方 Bot(qq_official) 下 `user_id` 是 openid（字母数字串，如 `nhB9vRr...`），并非 QQ 号，头像请求必然失败，且每次都会刷一条 `头像下载失败` warning。
   - 现改为：**拉取前先判断 `user_id` 是否形如 QQ 号**（纯数字且长度 5~12 位）；是才发请求，否则**静默跳过**（debug 级日志、不报错），卡片照常渲染（仅不显示头像）。
