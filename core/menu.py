@@ -97,7 +97,7 @@ def build_qq_keyboard() -> "Optional[dict]":
                         "action": {
                             "type": 2,  # 指令按钮：自动在输入框插入 @bot data
                             "permission": {"type": 2},  # 所有人可点
-                            "data": item["cmd"],  # 点击/自动发送的内容（无 / 前缀，按需求；@bot 由客户端自动加）
+                            "data": "/" + item["cmd"],  # 点击/自动发送的内容（带 / 前缀，匹配默认命令前缀 /；@bot 由客户端自动加）
                             "at_bot_show_channel_list": False,  # 不弹频道选择器，直接填充 data（官方已标记弃用，保留为默认行为）
                             "enter": True,  # 点击后把 data 作为消息自动发送（等同手打并回车；群聊下被忽略）
                         },

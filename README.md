@@ -182,6 +182,7 @@
     - **@ 统一进同一条消息**：v2.4.17 里状态图/背包图/图鉴图在群聊下会把 @ 拆成「单独的纯文本消息 + 图片两条」，用户感知为「有的消息@有的没有、像 bug」。v2.4.18 改为合并为一条消息，但初版误用 `event.chain_result(MessageChain(...))` 触发 `TypeError: MessageChain has no len()`（AstrBot `result.chain` 需为组件列表）。**v2.4.19 修正为 `event.chain_result([Plain(mention), Image(file_path=path)])`**（列表形式），与文本回复行为完全一致（群聊下所有个人关键回复都 @，私聊不 @）。
     - **头像根因修复**：此前头像一直拉不到，根因有二——① `draw/utils.py` 里 `from .core.qq_official` 相对路径写错（应为 `..core.qq_official`），运行期 `ModuleNotFoundError` 被 `get_user_avatar` 的 try/except 静默吞掉，头像永远走不到官方接口；② 群聊里 `event.get_sender_id()` 返回的是「群作用域」member openid，旧代码只用 C2C 接口 `GET /v2/users/{openid}`（群成员 openid 用该接口 404）。现改为：群聊优先 `GET /v2/groups/{group_openid}/members/{member_openid}`、失败回退 C2C 接口，单聊直接用 C2C 接口；openid 兼容 `get_sender_openid(raw)` 与 `event.get_sender_id()` 兜底。状态/背包/图鉴三处图片均已 `event=event` 透传。
     - ⚠️ 仍不显示头像时：看运行日志 `[头像]` 开头的 debug 行（会打印实际 route、openid、接口返回/异常）。若群成员接口 404，多为 `group_openid`/`member_openid` 取值与当前 AstrBot 版本结构不符，贴该行即可定位。
+  - **🖲️ 按钮 `data` 恢复带 `/` 前缀（v2.4.20）**：按用户要求，官方 Bot 键盘按钮 `action.data` 由 v2.4.16 起的纯指令词（如 `钓鱼`）改回 `/` + 指令（如 `/钓鱼`）。点击/自动发送的内容即 `/钓鱼`，需配合 AstrBot **默认命令前缀 `/`** 才能触发（前缀为空则 `/钓鱼` 不会触发 `钓鱼`）。若此前为用无 `/` 按钮把 `command_prefix` 设成了空字符串，现在需改回 `/`（或保留空前缀、但按钮就点不动了）。`core/menu.py::build_qq_keyboard`。
 
 **🎖️ 新功能：钓鱼阶级系统（段位制 · 纯增益型）**
 

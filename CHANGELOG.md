@@ -1,5 +1,17 @@
 # 📦 更新记录
 
+## v2.4.20 (按钮 data 恢复带 / 前缀)
+- **🖲️ 官方 Bot 键盘按钮 `data` 恢复 `/` 前缀**：按用户要求，把 v2.4.16 去掉的 `/` 前缀加回来——
+  `core/menu.py::build_qq_keyboard` 中按钮 `action.data` 由 `item["cmd"]`（纯指令词如 `钓鱼`）
+  改回 `"/" + item["cmd"]`（如 `/钓鱼`）。
+- **⚠️ 配置配套（重要）**：点击/自动发送的内容现在是 `/钓鱼`，需 AstrBot **命令前缀为 `/`**（默认）才能触发。
+  若此前为用「无 `/` 按钮」把 `command_prefix` 设成了空字符串，现在必须改回 `/`；否则按钮点了不触发指令。
+  （纯文本降级的 `/选 N` 走插件侧解析，不受此前前缀改动影响，始终可用。）
+- 影响范围：仅 `core/menu.py`（按钮 data，无逻辑分支变化）。`build_menu_text` 纯文本面板不变。
+- 校验：`py_compile core/menu.py` 通过。
+
+---
+
 ## v2.4.19 (修复 chain_result 传 MessageChain 导致崩溃)
 - **🐛 修复 `event.chain_result()` 传 `MessageChain` 对象崩溃**：v2.4.18 把状态/背包/图鉴的图片回复改成
   `event.chain_result(MessageChain().message(mention).file_image(path))`，运行期报
