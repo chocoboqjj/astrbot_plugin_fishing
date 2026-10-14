@@ -1,5 +1,16 @@
 # 📦 更新记录
 
+## v2.4.16 (面板精简：去掉多余描述 + 按钮 data 去 / 前缀)
+- **🧹 面板文本精简**：`/面板` 纯文本降级内容去掉冗余描述——删除「例：发送「/选 1」即开始钓鱼。」与「📱 QQ 官方 Bot 下可直接点上方按钮，无需手打。」两行；编号列表也不再逐行带「→ /指令」，只保留「🎮 钓鱼快捷面板」标题 + 10 项编号列表 + 一行「回复 /选 N 执行对应指令」提示。`core/menu.py::build_menu_text` 重写。
+- **⌨️ 官方 Bot 键盘按钮 `data` 去 `/` 前缀**：`build_qq_keyboard` 中按钮 `action.data` 由 `"/" + cmd` 改为 `cmd`（纯指令词，如 `钓鱼` 而非 `/钓鱼`）。点击/自动发送的内容即指令本名，客户端仍自动补 `@bot`。`core/menu.py::build_qq_keyboard`。
+- **⚠️ 触发注意（重要）**：QQ 官方 Bot 点按钮时，客户端把 `data` 作为消息发出，AstrBot 按命令前缀匹配。默认命令前缀为 `/`，即 `/钓鱼` 才能触发；若 `data` 为无 `/` 的 `钓鱼`，而 AstrBot **命令前缀仍是默认 `/`**，点击按钮将**不会触发指令**（message_str=钓鱼，不匹配 /钓鱼）。
+  - 要让无 `/` 按钮可用，需把 AstrBot 的 `command_prefix` 设为**空字符串**（官方 Bot 下用 `@bot` 提及已能区分指令，空前缀是常见配置），此时 `钓鱼` 即触发 `/钓鱼`。
+  - 若不想改全局前缀、又想保留无 `/` 按钮，请告知，可改回 `data="/"+cmd` 或在插件侧做裸词兜底。
+- 影响范围：`core/menu.py`（仅面板展示与键盘 data，无逻辑分支变化）。
+- 校验：`py_compile core/menu.py` 通过。
+
+---
+
 ## v2.4.15 (官方 Bot 检测「多信号容错」：按钮 + 头像一起修好)
 - **🐛 修复 QQ 官方 Bot 下「按钮不出 + 头像拉不到」同时失效**：根因是 `main.py` 的键盘发送与 `draw/utils.py` 的头像解析都依赖 `isinstance(raw_message, botpy.GroupMessage/C2CMessage)` 这一单一信号；用户实测其环境里该 isinstance 判定为 False（raw_message 不是 botpy 原生类型），于是两处同时静默跳过——表现就是「只有纯文本菜单、头像也没有」。
   - 新增共享检测模块 `core/qq_official.py`，对官方 Bot 上下文做**多信号容错**判定（`is_official_bot_event`）：① botpy 原生类型；② raw_message 类名/模块名含 qq/botpy/group/c2c/official；③ raw_message 携带 `group_openid` 或 `author.user_openid`（兼容对象属性与 dict 键，并兼容 QQ 网关事件外层 `d`/`data` 包裹）；④ `platform_name` 子串含 official/qq_official。任一命中即视为官方 Bot。

@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.15）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.16）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -39,7 +39,8 @@
   - 每个 button：`id`(键盘内唯一) + `render_data{label, visited_label(必填), style(0灰/1蓝)}` + `action{type, permission, data, enter}`。
   - `render_data.label` / `visited_label` **最多 10 字符**（按钮文案控制在 10 字内）。
   - `action.type=2`(指令按钮：客户端自动在输入框插入 `@bot data`) + `action.permission.type=2`(所有人可点) +
-    `action.data="/指令"` + `action.enter=True`(单聊点击直接自动发送；**群聊下 enter 被忽略**，按钮仅把指令填入输入框，玩家需手动发送)。
+    `action.data="指令"（v2.4.16 起去掉 / 前缀，原为 /指令；客户端仍自动补 @bot）` + `action.enter=True`(单聊点击直接自动发送；**群聊下 enter 被忽略**，按钮仅把指令填入输入框，玩家需手动发送)。
+  - **⚠️ 触发前缀坑（v2.4.16 用户要求 data 去 `/`）**：官方 Bot 点按钮时客户端把 `data` 作为消息发出，AstrBot 按命令前缀匹配。默认前缀 `/` → 仅 `/钓鱼` 触发；若 `data=钓鱼` 且前缀仍是 `/`，**点击不触发指令**。需把 AstrBot `command_prefix` 设为空字符串（官方 Bot 用 `@bot` 提及已能区分，空前缀常见），否则按钮点了无反应。面板纯文本（`build_menu_text`）同步精简：去掉示例句与「📱 可直接点上方按钮」说明行，列表不再逐行带「→ /指令」。
   - `at_bot_show_channel_list` 官方已标记弃用，保留 `False`（默认行为，无害）。
   - 主操作「🎣 钓鱼」置 `style=1`(蓝主按钮)，其余 `style=0`(灰)。
   - 官方 Bot **无需额外后台配置**，按钮能否出现只取决于发送路径是否正确。代码见 `main.py::_send_qq_keyboard`、

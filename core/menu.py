@@ -37,12 +37,10 @@ _LABEL_MAX = 10
 
 def build_menu_text() -> str:
     """生成编号菜单文本（纯文本降级方案用）。"""
-    lines = ["🎮 钓鱼快捷面板（回复「/选 N」即可执行对应指令）："]
+    lines = ["🎮 钓鱼快捷面板"]
     for i, item in enumerate(MENU_ITEMS, 1):
-        lines.append(f"{i}. {item['label']}  →  /{item['cmd']}")
-    lines.append("")
-    lines.append("例：发送「/选 1」即开始钓鱼。")
-    lines.append("📱 QQ 官方 Bot 下可直接点上方按钮，无需手打。")
+        lines.append(f"{i}. {item['label']}")
+    lines.append("回复 /选 N 执行对应指令")
     return "\n".join(lines)
 
 
@@ -99,7 +97,7 @@ def build_qq_keyboard() -> "Optional[dict]":
                         "action": {
                             "type": 2,  # 指令按钮：自动在输入框插入 @bot data
                             "permission": {"type": 2},  # 所有人可点
-                            "data": "/" + item["cmd"],  # 点击/自动发送的内容（@bot 由客户端自动加）
+                            "data": item["cmd"],  # 点击/自动发送的内容（无 / 前缀，按需求；@bot 由客户端自动加）
                             "at_bot_show_channel_list": False,  # 不弹频道选择器，直接填充 data（官方已标记弃用，保留为默认行为）
                             "enter": True,  # 点击后把 data 作为消息自动发送（等同手打并回车；群聊下被忽略）
                         },
