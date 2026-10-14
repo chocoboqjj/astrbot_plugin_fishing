@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.7）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.9）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -38,6 +38,10 @@
   （`enter` 不在 botpy 的 Action TypedDict 里，但走 raw JSON 会被转发；不支持时按钮仍会填入输入框）。
   官方 Bot **无需额外后台配置**，按钮能否出现只取决于发送路径是否正确。代码见 `main.py::_send_qq_keyboard`、
   `core/menu.py::build_qq_keyboard`，发送为 best-effort，异常降级纯文本。
+- **⚠️ QQ 头像按 QQ 号拉取（2026-10-14 踩坑→修复）**：`draw/utils.py::get_user_avatar` 把 `user_id` 拼进
+  `q4.qlogo.cn/headimg_dl?dst_uin={user_id}` 拉 QQ 头像。官方 Bot 下 `user_id` 是 openid（字母数字串）而非 QQ 号，
+  请求必败且每次刷 warning。已改为：仅当 `user_id.isdigit() and 5<=len<=12`（像 QQ 号）才发请求，否则静默跳过
+  （debug 日志、不报错），状态/背包/图鉴照常渲染（仅不显示头像）。NapCat 数字 QQ 号头像不受影响。
 
 - **⚠️ 拟饵「是否消耗」看 `is_consumable`，不是 `duration_minutes`（2026-10-14 踩坑→修复）**：`fishing_service` 曾只按
   `duration_minutes==0` 判定「一次性鱼饵每次扣1」，导致亮片拟饵/大师拟饵（`is_consumable=False`「无消耗」但 `duration_minutes` 也=0）

@@ -1,5 +1,13 @@
 # 📦 更新记录
 
+## v2.4.9 (官方 Bot 头像拉取兼容性修复)
+- **🐛 修复官方 Bot 下个人头像获取失败**：状态页 / 背包 / 图鉴卡均通过 `get_user_avatar` 按 `user_id` 从 `q4.qlogo.cn` 拉取 QQ 头像。官方 Bot(qq_official) 下 `user_id` 是 openid（字母数字串，如 `nhB9vRr...`），并非 QQ 号，头像请求必然失败，且每次都会刷一条 `头像下载失败` warning。
+  - 现改为：**拉取前先判断 `user_id` 是否形如 QQ 号**（纯数字且长度 5~12 位）；是才发请求，否则**静默跳过**（debug 级日志、不报错），卡片照常渲染（仅不显示头像）。
+  - 影响范围：`draw/utils.py::get_user_avatar`，被 `draw/state.py`、`draw/backpack.py`、`draw/pokedex.py` 三处调用，一处修复全覆盖。
+  - NapCat(aiocqhttp) 等纯数字 QQ 号用户头像不受影响，仍正常显示。
+
+---
+
 ## v2.4.8 (无消耗拟饵消耗修复)
 - **🐛 修复「无消耗」拟饵被误扣（亮片拟饵 / 大师拟饵）**：`fishing_service` 的鱼饵消耗逻辑此前**仅按 `duration_minutes == 0`** 判定「一次性鱼饵，每次钓鱼扣 1 个」，未读取 `is_consumable` 标记。而「亮片拟饵」「大师拟饵」这两个描述为「无消耗、可长期使用」的拟饵，`duration_minutes` 同为 0，导致它们**每次钓鱼都被扣 1**，与「无消耗」严重不符（用到归零即消失）。
   - 现改为按 `is_consumable` 判定：仅**可消耗型**（`True`，如蚯蚓/面包团/红虫）每次钓鱼扣 1；**无限拟饵**（`False`）只应用加成、**绝不扣库存**，可长期使用。

@@ -43,6 +43,12 @@ async def get_user_avatar(user_id: str, data_dir: str, avatar_size: int = 50) ->
         
         # 如果没有缓存或缓存过期，重新下载
         if avatar_image is None:
+            # 仅当 user_id 形如 QQ 号（纯数字、长度 5~12 位）时才尝试拉取 QQ 头像。
+            # 官方 Bot(qq_official) 等平台下 user_id 为 openid（字母数字串，如 nhB9vRr...），
+            # 并非 QQ 号，此时无法映射到 QQ 头像，直接跳过以免发起必败请求并刷 warning 日志。
+            if not user_id.isdigit() or not (5 <= len(user_id) <= 12):
+                logger.debug(f"user_id={user_id} 非 QQ 号（可能为官方Bot openid），跳过头像拉取。")
+                return None
             avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=640"
             try:
                 # 增加超时时间并添加重试机制
