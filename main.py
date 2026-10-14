@@ -41,6 +41,11 @@ from .core.services.red_packet_service import RedPacketService # 新增红包Ser
 
 from .core.database.migration import run_migrations
 from .core.config_defaults import build_game_config, DEFAULT_TAX_CONFIG
+from .core.qq_official import (  # noqa: E402 官方 Bot 多信号检测（按钮/头像共用）
+    is_official_bot_event,
+    get_official_route_target,
+    get_message_id,
+)
 
 # ==========================================================
 # 导入所有指令函数
@@ -505,20 +510,11 @@ class FishingPlugin(Star):
     def _is_qq_official(self, event) -> bool:
         """判断当前消息是否来自 QQ 官方 Bot（qq_official）。
 
-        检测优先级与头像逻辑保持一致（已验证可用）：优先看 raw_message 真实类型——
-        官方 Bot 下是 botpy 的 GroupMessage / C2CMessage；再用 platform_name 兜底
-        （不同 AstrBot 版本字符串可能不同，故用 'qq_official' 子串匹配，避免 exact 匹配失效）。
+        已改为多信号容错检测（见 core.qq_official.is_official_bot_event），不再依赖
+        特定 AstrBot 版本下可能失效的 isinstance(raw, botpy.x) 或 platform_name == "qq_official"
+        exact 匹配（用户实测这两种信号均不稳定）。
         """
-        raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
-        try:
-            import botpy.message
-
-            if isinstance(raw, (botpy.message.GroupMessage, botpy.message.C2CMessage)):
-                return True
-        except Exception:
-            pass
-        platform_name = getattr(getattr(event, "platform_meta", None), "platform_name", "") or ""
-        return "qq_official" in platform_name.lower()
+        return is_official_bot_event(event)
 
     async def _send_qq_keyboard(self, event: AstrMessageEvent, text: str, kb: "Optional[dict]" = None) -> bool:
         """
@@ -539,7 +535,6 @@ class FishingPlugin(Star):
            msg_type=2=markdown，keyboard 与 markdown 同体；msg_id 被动回复，msg_seq 默认 1）
         """
         try:
-            import botpy.message
             from botpy.http import Route
             from botpy.types.message import MarkdownPayload
         except Exception as e:
@@ -556,7 +551,7 @@ class FishingPlugin(Star):
             return False
 
         content = text or "\u200b"  # QQ 键盘消息要求 markdown content 非空，空则用零宽占位
-        msg_id = getattr(raw, "id", None)
+        msg_id = get_message_id(raw)
         try:
             payload: dict = {
                 "msg_type": 2,  # 2 = markdown 消息（键盘必须挂 markdown）
@@ -566,24 +561,25 @@ class FishingPlugin(Star):
             if kb is not None:
                 payload["keyboard"] = kb
 
-            if isinstance(raw, botpy.message.GroupMessage):
+            kind, target = get_official_route_target(raw)
+            if kind == "group":
                 payload["msg_seq"] = 1
                 route = Route(
                     "POST",
                     "/v2/groups/{group_openid}/messages",
-                    group_openid=raw.group_openid,
+                    group_openid=target,
                 )
-            elif isinstance(raw, botpy.message.C2CMessage):
+            elif kind == "c2c":
                 payload["msg_seq"] = 1
                 route = Route(
                     "POST",
                     "/v2/users/{openid}/messages",
-                    openid=raw.author.user_openid,
+                    openid=target,
                 )
             else:
                 logger.debug(
-                    f"[菜单] 官方Bot键盘跳过：raw_message 类型 {type(raw).__name__} "
-                    f"既不是 GroupMessage 也不是 C2CMessage"
+                    f"[菜单] 官方Bot键盘跳过：未能从 raw_message（类型 {type(raw).__name__}）"
+                    f"提取 group_openid / user_openid，详见 [detect] 日志"
                 )
                 return False
 

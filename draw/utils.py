@@ -90,11 +90,12 @@ async def get_user_avatar(user_id: str, data_dir: str, avatar_size: int = 50, ev
 async def _resolve_official_avatar(event: Any) -> Optional[str]:
     """官方 Bot(qq_official) 下，依 openid 调官方接口取用户头像 URL。
 
-    仅当消息原始对象是 botpy 的 GroupMessage / C2CMessage（即官方 Bot 上下文）时才尝试；
-    其它平台、缺少 bot 客户端、或任何失败均返回 None，由调用方静默跳过（不显示头像）。
+    改用 core.qq_official 多信号容错提取 openid（兼容 dict / 包装对象 / 不同 AstrBot
+    版本形态），不再要求 raw_message 必须是 botpy 原生 GroupMessage / C2CMessage
+    （用户实测下该 isinstance 判定为 False，导致头像始终拉取失败）。
+    缺少 bot 客户端、openid、或任何失败均返回 None，由调用方静默跳过（不显示头像）。
     """
     try:
-        import botpy.message  # noqa: F401
         from botpy.http import Route
     except Exception:
         return None
@@ -105,20 +106,22 @@ async def _resolve_official_avatar(event: Any) -> Optional[str]:
     raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
     if raw is None:
         return None
-    author = getattr(raw, "author", None)
-    if author is None:
-        return None
-    openid = getattr(author, "user_openid", None)
+
+    from .core.qq_official import get_sender_openid
+
+    openid = get_sender_openid(raw)
     if not openid:
+        logger.debug(
+            f"[头像] 官方Bot取头像URL跳过：raw_message（类型 {type(raw).__name__}）"
+            f"无可识别的 user_openid，详见 [detect] 日志"
+        )
         return None
 
     try:
-        if isinstance(raw, (botpy.message.GroupMessage, botpy.message.C2CMessage)):
-            # 官方接口「获取用户详情」按 openid 返回资料，含 avatar 字段
-            route = Route("GET", "/v2/users/{openid}", openid=openid)
-            data = await bot.api._http.request(route)
-            return _extract_avatar_from_userinfo(data)
-        return None
+        # 官方接口「获取用户详情」按 openid 返回资料，含 avatar 字段
+        route = Route("GET", "/v2/users/{openid}", openid=openid)
+        data = await bot.api._http.request(route)
+        return _extract_avatar_from_userinfo(data)
     except Exception as e:
         logger.debug(f"[头像] 官方Bot取头像URL失败：{e}")
         return None

@@ -1,5 +1,16 @@
 # 📦 更新记录
 
+## v2.4.15 (官方 Bot 检测「多信号容错」：按钮 + 头像一起修好)
+- **🐛 修复 QQ 官方 Bot 下「按钮不出 + 头像拉不到」同时失效**：根因是 `main.py` 的键盘发送与 `draw/utils.py` 的头像解析都依赖 `isinstance(raw_message, botpy.GroupMessage/C2CMessage)` 这一单一信号；用户实测其环境里该 isinstance 判定为 False（raw_message 不是 botpy 原生类型），于是两处同时静默跳过——表现就是「只有纯文本菜单、头像也没有」。
+  - 新增共享检测模块 `core/qq_official.py`，对官方 Bot 上下文做**多信号容错**判定（`is_official_bot_event`）：① botpy 原生类型；② raw_message 类名/模块名含 qq/botpy/group/c2c/official；③ raw_message 携带 `group_openid` 或 `author.user_openid`（兼容对象属性与 dict 键，并兼容 QQ 网关事件外层 `d`/`data` 包裹）；④ `platform_name` 子串含 official/qq_official。任一命中即视为官方 Bot。
+  - 路由提取 `get_official_route_target(raw)` → `("group", group_openid)` / `("c2c", user_openid)`，统一供键盘发送与头像拉取复用；`get_message_id(raw)` 稳健取被动回复 message id（兼容 dict）。
+  - 两处落地改造：`main.py::_send_qq_keyboard` 改用 `get_official_route_target` 选路由（不再 isinstance 分流）；`draw/utils.py::_resolve_official_avatar` 改用 `get_sender_openid(raw)` 取头像，去掉 `import botpy.message` 与 isinstance 门禁。
+  - 加诊断日志：`is_official_bot_event` 每次调用打一行 `[detect]` debug，记录 raw_type / 各信号命中情况 / `platform_name` / raw_message 截断 repr（≤600 字）。若仍失败，贴运行日志里这行即可定位真实事件结构。
+  - 影响范围：`core/qq_official.py`（新增）、`main.py`（`_is_qq_official` 委托 + `_send_qq_keyboard` 路由）、`draw/utils.py`（`_resolve_official_avatar`）。
+  - 校验：`py_compile` 三个文件通过；新增多信号断言脚本覆盖 9 类样本（botpy 原生群/单聊、dict 顶层、QQ 网关 `d` 包裹、单聊 dict、无 openid 的 NapCat、platform 子串兜底、官方变体名、aiocqhttp）全绿。
+
+---
+
 ## v2.4.14 (官方 Bot 键盘按钮「整段被跳过」修复：检测与头像对齐)
 - **🐛 修复 `/面板` 在 QQ 官方 Bot 下只出纯文本、不出按钮**：早期 `quick_menu` 用 `platform_name == "qq_official"` 字符串精确匹配决定是否发原生键盘；一旦 AstrBot 上报的 `platform_name` 字符串对不上，整段被跳过、直接降级成「/选 N」纯文本菜单（典型现象：头像能出、按钮没有——因为头像检测走的是 `raw_message` 真实类型、按钮检测却走了不可靠的字符串）。
   - 改为主线检测与头像逻辑一致：看 `event.message_obj.raw_message` 是否为 botpy `GroupMessage` / `C2CMessage`，命中即发按钮；再用 `platform_name` 含 `qq_official` 子串兜底（兼容大小写/前后缀）。

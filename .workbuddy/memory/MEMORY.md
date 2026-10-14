@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.14）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.15）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -44,19 +44,23 @@
   - 主操作「🎣 钓鱼」置 `style=1`(蓝主按钮)，其余 `style=0`(灰)。
   - 官方 Bot **无需额外后台配置**，按钮能否出现只取决于发送路径是否正确。代码见 `main.py::_send_qq_keyboard`、
     `core/menu.py::build_qq_keyboard`；发送为 best-effort，异常降级纯文本。结构经脚本逐项断言（行/列上限、字段必填、label≤10、取值）通过。
-  - **⚠️ 检测坑（v2.4.14 踩坑→修复）**：`/面板` 早期用 `platform_name == "qq_official"` 字符串**精确匹配**当门，
-    一旦 AstrBot 上报的 `platform_name` 字符串对不上，整段被跳过 → 只出「/选 N」纯文本菜单（典型现象：**头像能出、按钮没有**，
-    因为头像用 `raw_message` 真实类型判定、按钮却用了不可靠的字符串）。修复：主线检测与头像一致——
-    看 `event.message_obj.raw_message` 是否为 botpy `GroupMessage`/`C2CMessage`，命中即发；再用 `platform_name` 含 `qq_official`
-    子串兜底（兼容大小写/前后缀）。新增 `FishingPlugin._is_qq_official(event)`；`_send_qq_keyboard` 各静默失败点补 `logger.debug("[菜单] ...")`，
-    发送异常仍是 `logger.warning`。**若用户报「还是没按钮」，先让他查运行日志里的 `[菜单]` 行**——能直接看出是检测没过还是发送失败；
-    若连 `[菜单]` 都没有，说明根本没进 `quick_menu`（命令没被识别/别名问题）。
+  - **⚠️ 检测坑（v2.4.14 误判→v2.4.15 彻底改成多信号容错）**：`/面板` 早期用 `platform_name == "qq_official"` 精确匹配当门，
+    v2.4.14 改成看 `raw_message` 是否为 botpy `GroupMessage`/`C2CMessage`。**但用户实测其环境里这个 isinstance 判定也是 False**——
+    于是 v2.4.14 后「头像也拉不到」被坐实：按钮与头像**共用同一个失效信号** `isinstance(raw_message, botpy.GroupMessage/C2CMessage)`，
+    两处同时静默跳过（表现：`/面板` 只出纯文本、`get_user_avatar` 永远走不到官方接口）。
+    **v2.4.15 根因修复**：新增共享模块 `core/qq_official.py` 的 `is_official_bot_event(event)`，多信号容错——
+    ① botpy 原生类型；② `raw_message` 类名/模块名含 qq/botpy/group/c2c/official；③ `raw_message` 带 `group_openid` 或
+    `author.user_openid`（兼容对象属性与 dict 键，并兼容 QQ 网关事件外层 `d`/`data` 包裹）；④ `platform_name` 含 official/qq_official
+    子串——任一命中即官方 Bot。键盘发送用 `get_official_route_target(raw)` 选群(`group_openid`)/单聊(`user_openid`)路由；
+    头像用 `get_sender_openid(raw)` 取 URL；二者复用同一检测。`is_official_bot_event` 每次调用打一行 `[detect]` debug
+    （含 `raw_type`、各信号命中、`platform_name`、`raw_message` 截断 repr≤600 字），**若仍不生效，让用户贴运行日志里的 `[detect]` 行即可定位真实事件结构**。
+    `main.py::_is_qq_official` 现仅委托 `is_official_bot_event`；`_send_qq_keyboard` 静默失败点补 `[菜单]` debug，发送异常 `logger.warning`。
 - **⚠️ QQ 头像（2026-10-14 踩坑→修复→增强）**：`draw/utils.py::get_user_avatar(user_id, data_dir, avatar_size, event=None)`：
   - NapCat 等**纯数字 QQ 号**（`user_id.isdigit() and 5<=len<=12`）→ 走 `q4.qlogo.cn/headimg_dl?dst_uin={user_id}`。
   - **官方 Bot(openid)**：`user_id` 是 openid 而非 QQ 号，不能走 qlogo；但渲染时 handler 透传 `event`，
-    在非官方 Bot 上下文（消息原始对象为 botpy `GroupMessage`/`C2CMessage`）时，调官方接口
-    `GET /v2/users/{openid}` 取 `avatar` URL 再下载（24h 缓存；`_resolve_official_avatar` + `_extract_avatar_from_userinfo`，
-    后者兼容 `avatar` / `user.avatar` / `data.*` 多种返回结构）。
+    在官方 Bot 上下文（`core.qq_official.is_official_bot_event` 多信号命中，v2.4.15 起不再依赖 botpy `isinstance`）时，
+    调官方接口 `GET /v2/users/{openid}`（`openid` 由 `get_sender_openid(raw)` 取，兼容对象/dict/`d`包裹）取 `avatar` URL 再下载
+    （24h 缓存；`_resolve_official_avatar` + `_extract_avatar_from_userinfo`，后者兼容 `avatar` / `user.avatar` / `data.*` 多种返回结构）。
   - 非官方 Bot / 无 `event` / 接口异常 → **静默降级**（debug 日志、不报错），状态/背包/图鉴照常渲染（仅不显示头像）。
   - 调用链：`common_handlers`(状态) / `inventory_handlers`(背包) / `fishing_handlers`(图鉴) → `draw_state_image`/`draw_backpack_image`/`draw_pokedex` 均新增 `event=None` 并透传给 `get_user_avatar`。
 
