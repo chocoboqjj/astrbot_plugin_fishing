@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.11）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.12）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -52,6 +52,16 @@
   每次钓鱼被扣到归零。已改为按 `is_consumable` 分流：一次性(True)每钓扣1；无限拟饵(False)只加加成、绝不扣库存；
   限时(duration>0)过期才清，且仅 True 才扣。`is_consumable` 是真实持久化字段（`Bait` 模型/`baits` 表/迁移003）。
   钓鱼消耗点仅 `fishing_service.py` 两处；`update_bait_quantity` 在 `quantity<=0` 会 DELETE 行，所以别对无限拟饵调它。
+
+- **⚠️ 擦弹「已用/上限/剩余」计数口径（2026-10-14 排查）**：
+  - **两套计数器**：`/擦弹` 执行与状态图用 `users.wipe_bomb_attempts_today`（用户字段，新一天首次擦弹时按 `last_wipe_bomb_date` 重置）；
+    【擦弹许可证】回执与「剩余」用 `wipe_bomb_log` 表今日行数（`get_wipe_bomb_log_count_today`，`contribution_amount>0`）。
+    两个计数在 `perform_wipe_bomb` 内锁步（+1 字段 + 写 1 行日志），被拦截的超上限擦弹不写日志，故不会脱节。**通用日志 `add_log` 写 `contribution_amount=0`，不计入**。
+  - **上限公式**：`get_wipe_bomb_max_attempts` = 基础(`max_attempts_per_day`,默认3) + buff(`WIPE_BOMB_ATTEMPTS_BOOST` 累加) + **阶级加成(`wipe_bomb_bonus`，各阶级 +1~+8)**。
+  - **历史坑（v2.4.12 修）**：【擦弹许可证】回执的「上限」曾只算 `基础 + buff`，**漏掉阶级加成**，导致有阶级加成的玩家回执剩余被少算（如基础3+许可3+阶级1，回执显示上限6、剩2，实际可擦上限7、剩3）。
+    v2.4.12 起回执改调 `game_mechanics_service.get_wipe_bomb_max_attempts(user_id, user)`，与 `/擦弹`、状态图三处对齐。
+    `game_mechanics_service` 已在 `main.py` 的 `EffectManager.discover_and_register` 依赖字典里，效果类 `__init__` 取 `kwargs["game_mechanics_service"]` 即可。
+  - **排查「已用」是否真实**：仓库根 `diagnose_wipe.py`（一次性工具，`python diagnose_wipe.py <fish.db> [user_id]`）列出今日 `wipe_bomb_log` 逐条时间戳 + `users.wipe_bomb_attempts_today` + 当前 buff，直接核对。
 
 ## 项目结构要点
 - 配置单一事实来源：`core/config_defaults.py`（`build_game_config()` 做容错与区间修正）

@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta
 from typing import Dict, Any
 import json
 
@@ -19,6 +18,9 @@ class AddWipeBombAttemptsEffect(AbstractItemEffect):
         super().__init__(user_repo, buff_repo, **kwargs)
         self.log_repo = kwargs.get("log_repo")
         self.game_config = kwargs.get("game_config")
+        # 复用 game_mechanics_service.get_wipe_bomb_max_attempts，确保「上限」与
+        # /擦弹 执行、状态图口径完全一致（含 基础 + buff + 阶级加成）。
+        self.game_mechanics_service = kwargs.get("game_mechanics_service")
         if not self.log_repo or not self.game_config:
             raise ValueError("LogRepository and GameConfig are required for this effect.")
 
@@ -82,8 +84,16 @@ class AddWipeBombAttemptsEffect(AbstractItemEffect):
                 extra_attempts_after_update = 0
 
         # 计算剩余次数
-        base_max_attempts = self.game_config.get("wipe_bomb", {}).get("max_attempts_per_day", 3)
-        total_max_attempts = base_max_attempts + extra_attempts_after_update
+        # 统一走 game_mechanics_service.get_wipe_bomb_max_attempts：
+        # 上限 = 基础次数 + buff加成 + 阶级加成，与 /擦弹 执行、状态图完全一致。
+        if self.game_mechanics_service is not None:
+            total_max_attempts = self.game_mechanics_service.get_wipe_bomb_max_attempts(
+                user.user_id, user=user
+            )
+        else:
+            # 兜底：拿不到服务时退化为 基础 + buff（旧口径，不含阶级加成）
+            base_max_attempts = self.game_config.get("wipe_bomb", {}).get("max_attempts_per_day", 3)
+            total_max_attempts = base_max_attempts + extra_attempts_after_update
         used_attempts_today = self.log_repo.get_wipe_bomb_log_count_today(user.user_id)
         remaining_today = max(0, total_max_attempts - used_attempts_today)
 
