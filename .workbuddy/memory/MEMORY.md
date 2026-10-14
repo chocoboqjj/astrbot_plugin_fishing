@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.17）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.18）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -56,14 +56,28 @@
     头像用 `get_sender_openid(raw)` 取 URL；二者复用同一检测。`is_official_bot_event` 每次调用打一行 `[detect]` debug
     （含 `raw_type`、各信号命中、`platform_name`、`raw_message` 截断 repr≤600 字），**若仍不生效，让用户贴运行日志里的 `[detect]` 行即可定位真实事件结构**。
     `main.py::_is_qq_official` 现仅委托 `is_official_bot_event`；`_send_qq_keyboard` 静默失败点补 `[菜单]` debug，发送异常 `logger.warning`。
-- **⚠️ QQ 头像（2026-10-14 踩坑→修复→增强）**：`draw/utils.py::get_user_avatar(user_id, data_dir, avatar_size, event=None)`：
+- **⚠️ QQ 头像（2026-10-14 踩坑→v2.4.15 多信号→v2.4.18 根因修复）**：`draw/utils.py::get_user_avatar(user_id, data_dir, avatar_size, event=None)`：
   - NapCat 等**纯数字 QQ 号**（`user_id.isdigit() and 5<=len<=12`）→ 走 `q4.qlogo.cn/headimg_dl?dst_uin={user_id}`。
-  - **官方 Bot(openid)**：`user_id` 是 openid 而非 QQ 号，不能走 qlogo；但渲染时 handler 透传 `event`，
-    在官方 Bot 上下文（`core.qq_official.is_official_bot_event` 多信号命中，v2.4.15 起不再依赖 botpy `isinstance`）时，
-    调官方接口 `GET /v2/users/{openid}`（`openid` 由 `get_sender_openid(raw)` 取，兼容对象/dict/`d`包裹）取 `avatar` URL 再下载
-    （24h 缓存；`_resolve_official_avatar` + `_extract_avatar_from_userinfo`，后者兼容 `avatar` / `user.avatar` / `data.*` 多种返回结构）。
+  - **官方 Bot(openid)**：`user_id` 是 openid 而非 QQ 号，不能走 qlogo；渲染时 handler 透传 `event`，在官方 Bot 上下文
+    调官方接口取 `avatar` URL 再下载（24h 缓存；`_resolve_official_avatar` + `_extract_avatar_from_userinfo`，
+    后者兼容 `avatar` / `user.avatar` / `data.*` 多种返回结构）。
+  - **v2.4.18 根因修复（此前头像一直拉不到的真正原因）**：
+    1. `draw/utils.py` 里写成了 `from .core.qq_official import ...`，但 `core` 在插件**顶层包**（`..core`），
+       应为 `from ..core.qq_official import ...`。运行期 `ModuleNotFoundError` 被 `get_user_avatar` 的 try/except
+       静默吞掉，头像永远走不到官方接口（表现为「头像还是没出来」）。已改 `..core`。
+    2. **群聊 member openid 是「群作用域」的**：旧代码只用 C2C 接口 `GET /v2/users/{openid}`，群成员 openid 用该接口会 404。
+       现改为——群聊优先 `GET /v2/groups/{group_openid}/members/{member_openid}`、失败回退 C2C；单聊直接用 C2C 接口。
+       openid 来源兼容 `get_sender_openid(raw)` 与 `event.get_sender_id()` 兜底。
+    - 诊断：运行日志 `[头像]` 开头 debug 行会打印实际 route、openid、接口返回/异常；群成员接口仍 404 多为
+      `group_openid`/`member_openid` 取值与当前 AstrBot 版本结构不符，贴该行即可定位。
   - 非官方 Bot / 无 `event` / 接口异常 → **静默降级**（debug 日志、不报错），状态/背包/图鉴照常渲染（仅不显示头像）。
-  - 调用链：`common_handlers`(状态) / `inventory_handlers`(背包) / `fishing_handlers`(图鉴) → `draw_state_image`/`draw_backpack_image`/`draw_pokedex` 均新增 `event=None` 并透传给 `get_user_avatar`。
+  - 调用链：`common_handlers`(状态) / `inventory_handlers`(背包) / `fishing_handlers`(图鉴) → `draw_state_image`/`draw_backpack_image`/`draw_pokedex` 均 `event=event` 透传给 `get_user_avatar`。
+- **⚠️ @ 提及「同一条消息」（v2.4.18 修复）**：官方 Bot 群聊下，状态图/背包图/图鉴图个人回复必须用
+  `event.chain_result(MessageChain().message(mention).file_image(path))` 把 @ 与图片合并为**一条消息**，
+  不能拆成「`plain_result(mention)` + `image_result(path)` 两条」（用户实测拆两条会感知为「有的消息@有的没有」bug）。
+  文本回复（钓鱼结果/签到/面板/`/选`）已用 `format_mention_reply(event, text)` 直接包 @，行为一致。
+  私聊/C2C 下 `format_mention_reply` 返回原文本（不 @，无意义）。`MessageChain` 需在 handler 顶部
+  `from astrbot.api.event import ..., MessageChain` 导入。
 
 - **⚠️ 拟饵「是否消耗」看 `is_consumable`，不是 `duration_minutes`（2026-10-14 踩坑→修复）**：`fishing_service` 曾只按
   `duration_minutes==0` 判定「一次性鱼饵每次扣1」，导致亮片拟饵/大师拟饵（`is_consumable=False`「无消耗」但 `duration_minutes` 也=0）

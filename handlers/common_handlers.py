@@ -1,5 +1,5 @@
 import os
-from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.event import filter, AstrMessageEvent, MessageChain
 from ..draw.help import draw_help_image
 from ..draw.state import draw_state_image, get_user_state_data
 from ..core.utils import get_now
@@ -63,11 +63,12 @@ async def state(self: "FishingPlugin", event: AstrMessageEvent):
     # 保存图像到临时文件
     image_path = os.path.join(self.tmp_dir, "user_status.png")
     image.save(image_path)
-    # 群聊下先 @ 发送方，再发图片，便于分辨是谁的状态
+    # 群聊下在「同一条消息」里 @ 发送方 + 发图片（避免拆成两条）
     _mention = format_mention_reply(event, "")
     if _mention:
-        yield event.plain_result(_mention)
-    yield event.image_result(image_path)
+        yield event.chain_result(MessageChain().message(_mention).file_image(image_path))
+    else:
+        yield event.image_result(image_path)
 
 async def fishing_log(self: "FishingPlugin", event: AstrMessageEvent):
     """查看钓鱼记录"""

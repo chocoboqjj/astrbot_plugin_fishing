@@ -93,6 +93,13 @@ async def _resolve_official_avatar(event: Any) -> Optional[str]:
     改用 core.qq_official 多信号容错提取 openid（兼容 dict / 包装对象 / 不同 AstrBot
     版本形态），不再要求 raw_message 必须是 botpy 原生 GroupMessage / C2CMessage
     （用户实测下该 isinstance 判定为 False，导致头像始终拉取失败）。
+
+    群聊与单聊用不同接口：
+      - 群消息：member openid 是「群作用域」的，必须用
+        ``GET /v2/groups/{group_openid}/members/{member_openid}``（用 C2C 的
+        ``/v2/users/{openid}`` 会 404）。这是头像此前在群聊里一直拉不到的根因。
+      - 单聊：用 ``GET /v2/users/{openid}``。
+    两个接口返回结构一致（含 avatar 字段），由 ``_extract_avatar_from_userinfo`` 解析。
     缺少 bot 客户端、openid、或任何失败均返回 None，由调用方静默跳过（不显示头像）。
     """
     try:
@@ -104,27 +111,52 @@ async def _resolve_official_avatar(event: Any) -> Optional[str]:
     if bot is None or getattr(bot, "api", None) is None:
         return None
     raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
-    if raw is None:
-        return None
 
-    from .core.qq_official import get_sender_openid
+    from ..core.qq_official import get_sender_openid, get_group_openid
 
-    openid = get_sender_openid(raw)
+    # openid 来源：优先从 raw_message 取；官方 Bot 下 event.get_sender_id() 返回的也是 openid，
+    # 作为更可靠的兜底（raw_message 结构因 AstrBot 版本而异，未必暴露 author.user_openid）。
+    openid = (get_sender_openid(raw) if raw is not None else None)
+    if not openid and hasattr(event, "get_sender_id"):
+        try:
+            sid = event.get_sender_id()
+            if sid:
+                openid = sid
+        except Exception:
+            pass
+    group_openid = get_group_openid(raw) if raw is not None else None
+
     if not openid:
         logger.debug(
-            f"[头像] 官方Bot取头像URL跳过：raw_message（类型 {type(raw).__name__}）"
-            f"无可识别的 user_openid，详见 [detect] 日志"
+            f"[头像] 官方Bot取头像URL跳过：raw_message 类型 "
+            f"{type(raw).__name__ if raw is not None else 'None'}，"
+            f"且 event.get_sender_id() 也为空；raw_repr={repr(raw)[:300]}"
         )
         return None
 
-    try:
-        # 官方接口「获取用户详情」按 openid 返回资料，含 avatar 字段
-        route = Route("GET", "/v2/users/{openid}", openid=openid)
-        data = await bot.api._http.request(route)
-        return _extract_avatar_from_userinfo(data)
-    except Exception as e:
-        logger.debug(f"[头像] 官方Bot取头像URL失败：{e}")
-        return None
+    # 候选路由：群聊优先用成员接口，单聊用用户接口；两者都试一遍以提高成功率。
+    routes: list = []
+    if group_openid:
+        routes.append(("group_member", Route("GET", "/v2/groups/{group_openid}/members/{member_openid}", group_openid=group_openid, member_openid=openid)))
+    routes.append(("c2c_user", Route("GET", "/v2/users/{openid}", openid=openid)))
+
+    last_err: Optional[str] = None
+    for label, route in routes:
+        try:
+            data = await bot.api._http.request(route)
+            url = _extract_avatar_from_userinfo(data)
+            if url:
+                logger.debug(f"[头像] 官方Bot取头像URL成功：route={label} openid={openid} url={url[:80]}")
+                return url
+            logger.debug(
+                f"[头像] 官方Bot取头像URL：route={label} openid={openid} "
+                f"接口已返回但未解析到 avatar，raw={repr(data)[:300]}"
+            )
+            last_err = "no_avatar_field"
+        except Exception as e:
+            last_err = f"{e}"
+            logger.debug(f"[头像] 官方Bot取头像URL失败：route={label} openid={openid} 错误={e}")
+    return None
 
 
 def _extract_avatar_from_userinfo(data: Any) -> Optional[str]:

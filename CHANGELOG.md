@@ -1,5 +1,18 @@
 # 📦 更新记录
 
+## v2.4.18 (@ 同条消息 + 头像根因修复)
+- **🔧 @ 提及统一放进「同一条消息」**：此前状态图/背包图/图鉴图在群聊下会先发一条「仅 @」的纯文本、再发图片（拆成两条，用户感知为 bug「有的消息@有的没有」）。现改为用 `MessageChain().message(mention).file_image(path)` 把 @ 与图片合并为一条消息，与文本回复（钓鱼结果/签到/面板/`/选`）行为一致。
+  - 覆盖范围：`common_handlers.state`、`inventory_handlers.user_backpack`、`fishing_handlers.pokedex`（三处个人图片回复）。
+  - 一致性规则：群聊下所有「个人」关键回复都 @ 发送方；私聊/C2C 不 @（无意义）。`utils.format_mention_reply` 逻辑不变（官方 Bot `<@!openid>`、NapCat `[CQ:at,qq=...]`）。
+- **🐛 头像根因修复（此前一直拉不到）**：`draw/utils.py::_resolve_official_avatar` 存在两个真实 bug——
+  1. 相对导入路径写错（`.core.qq_official` 应为 `..core.qq_official`），运行期抛 `ModuleNotFoundError` 被 `get_user_avatar` 的 try/except 静默吞掉，头像永远走不到官方接口。已改为 `..core.qq_official`。
+  2. 群聊里 `event.get_sender_id()` 返回的是「群作用域」的 member openid，旧代码只用 C2C 接口 `GET /v2/users/{openid}`（群成员 openid 用该接口会 404）。现改为：群聊优先 `GET /v2/groups/{group_openid}/members/{member_openid}`，失败再回退 C2C 接口；单聊直接用 C2C 接口。openid 来源兼容 `get_sender_openid(raw)` 与 `event.get_sender_id()` 兜底。
+  - 影响范围：`draw/utils.py`（`_resolve_official_avatar` 重写 + 诊断日志 `[头像]` 保留）、`draw/state.py`/`draw/backpack.py`/`draw/pokedex.py`（`event=event` 透传，已确认）。
+  - 校验：`py_compile` 全包通过；头像路由单测覆盖 群聊优先群成员接口 / 群接口失败回退 C2C / 单聊直接用 C2C / raw 无 openid 但 get_sender_id 兜底 / 多结构 avatar 解析 5 类全绿。
+- **⚠️ 仍不显示头像时排查**：看运行日志里 `[头像]` 开头的 debug 行——会打印实际调用的 route、openid、以及接口返回/异常。若打 `GET /v2/groups/...` 后报 404，多半是 `group_openid`/`member_openid` 取值与当前 AstrBot 版本结构不符，贴该行即可定位。
+
+---
+
 ## v2.4.17 (群聊回复 @ 发送方：仅关键回复)
 - **✨ 群聊下回复 @ 触发指令的玩家**：新增 `utils.format_mention_reply(event, text)`——群聊（`event.get_group_id()` 非空）时在回复文本前拼接发送方 @ 提及，私聊/C2C 原样返回（@ 无意义）。
   - 官方 Bot(openid，非纯数字)：`<@!openid>`（QQ 官方 Bot 内联提及语法，平台渲染成可点 @）。

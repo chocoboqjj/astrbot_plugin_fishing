@@ -1,5 +1,5 @@
 import os
-from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.event import filter, AstrMessageEvent, MessageChain
 from ..utils import to_percentage, format_accessory_or_rod, format_rarity_display, parse_amount, find_mentioned_user_id, format_mention_reply
 from typing import TYPE_CHECKING
 
@@ -40,11 +40,12 @@ async def user_backpack(plugin: "FishingPlugin", event: AstrMessageEvent):
             # 保存图像到临时文件
             image_path = os.path.join(plugin.tmp_dir, "user_backpack.png")
             image.save(image_path)
-            # 群聊下先 @ 发送方，再发图片，便于分辨是谁的背包
+            # 群聊下在「同一条消息」里 @ 发送方 + 发图片（避免拆成两条）
             _mention = format_mention_reply(event, "")
             if _mention:
-                yield event.plain_result(_mention)
-            yield event.image_result(image_path)
+                yield event.chain_result(MessageChain().message(_mention).file_image(image_path))
+            else:
+                yield event.image_result(image_path)
             
             # 如果内容被截断或过滤，额外发送提示
             if backpack_data.get('is_truncated', False):

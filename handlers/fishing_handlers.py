@@ -1,4 +1,4 @@
-from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.event import filter, AstrMessageEvent, MessageChain
 from astrbot.api import logger
 from ..core.utils import get_now
 from ..utils import safe_datetime_handler, to_percentage, safe_get_file_path, format_mention_reply
@@ -230,7 +230,12 @@ class FishingHandlers:
                 data_dir=self.plugin.data_dir,
                 event=event,
             )
-            yield event.image_result(output_path)
+            # 群聊下在「同一条消息」里 @ 发送方 + 发图片（与个人状态/背包一致）
+            _mention = format_mention_reply(event, "")
+            if _mention:
+                yield event.chain_result(MessageChain().message(_mention).file_image(output_path))
+            else:
+                yield event.image_result(output_path)
         except Exception as e:
             logger.error(f"绘制图鉴图片失败: {e}", exc_info=e)
             yield event.plain_result("❌ 绘制图鉴时发生错误，请稍后再试或联系管理员。")
