@@ -1,5 +1,23 @@
 # 📦 更新记录
 
+## v2.4.19 (修复 chain_result 传 MessageChain 导致崩溃)
+- **🐛 修复 `event.chain_result()` 传 `MessageChain` 对象崩溃**：v2.4.18 把状态/背包/图鉴的图片回复改成
+  `event.chain_result(MessageChain().message(mention).file_image(path))`，运行期报
+  `TypeError: object of type 'MessageChain' has no len()`（AstrBot v4.28.1 `result_decorate/stage.py` 对
+  `result.chain` 调 `len()`）。根因：`chain_result(chain)` 把入参**原样**存为 `result.chain`，框架要求其是
+  **消息组件列表**，而非 `MessageChain` 对象（`MessageChain` 无 `__len__`）。
+  - 正确写法：`event.chain_result([Plain(mention), Image(file_path=path)])`（列表形式）。
+  - 三处统一改为列表形式：`common_handlers.state`、`inventory_handlers.user_backpack`、`fishing_handlers.pokedex`；
+    handler 顶部导入由 `from astrbot.api.event import ..., MessageChain` 改为
+    `from astrbot.api.message_components import Plain, Image`。（`main.py` 的 `MessageChain().file_image(...)` 走
+    `context.send_message` 低层接口，不受影响，保持不变。）
+  - 校验：`py_compile` 三个 handler 通过。
+- **⚠️ 铁律（排障备忘）**：`event.chain_result(...)` 必须传 `List[BaseMessageComponent]`，**不要**传 `MessageChain`；
+  若想用 MessageChain 构造器，取列表用 `.chain`（`MessageChain().message(x).file_image(y).chain`）。`plain_result` /
+  `image_result` 不受影响。
+
+---
+
 ## v2.4.18 (@ 同条消息 + 头像根因修复)
 - **🔧 @ 提及统一放进「同一条消息」**：此前状态图/背包图/图鉴图在群聊下会先发一条「仅 @」的纯文本、再发图片（拆成两条，用户感知为 bug「有的消息@有的没有」）。现改为用 `MessageChain().message(mention).file_image(path)` 把 @ 与图片合并为一条消息，与文本回复（钓鱼结果/签到/面板/`/选`）行为一致。
   - 覆盖范围：`common_handlers.state`、`inventory_handlers.user_backpack`、`fishing_handlers.pokedex`（三处个人图片回复）。

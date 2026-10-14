@@ -1,5 +1,6 @@
 import os
-from astrbot.api.event import filter, AstrMessageEvent, MessageChain
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.message_components import Plain, Image
 from ..utils import to_percentage, format_accessory_or_rod, format_rarity_display, parse_amount, find_mentioned_user_id, format_mention_reply
 from typing import TYPE_CHECKING
 
@@ -43,7 +44,7 @@ async def user_backpack(plugin: "FishingPlugin", event: AstrMessageEvent):
             # 群聊下在「同一条消息」里 @ 发送方 + 发图片（避免拆成两条）
             _mention = format_mention_reply(event, "")
             if _mention:
-                yield event.chain_result(MessageChain().message(_mention).file_image(image_path))
+                yield event.chain_result([Plain(_mention), Image(file_path=image_path)])
             else:
                 yield event.image_result(image_path)
             

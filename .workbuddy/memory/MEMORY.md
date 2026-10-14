@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.18）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.19）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -72,12 +72,18 @@
       `group_openid`/`member_openid` 取值与当前 AstrBot 版本结构不符，贴该行即可定位。
   - 非官方 Bot / 无 `event` / 接口异常 → **静默降级**（debug 日志、不报错），状态/背包/图鉴照常渲染（仅不显示头像）。
   - 调用链：`common_handlers`(状态) / `inventory_handlers`(背包) / `fishing_handlers`(图鉴) → `draw_state_image`/`draw_backpack_image`/`draw_pokedex` 均 `event=event` 透传给 `get_user_avatar`。
-- **⚠️ @ 提及「同一条消息」（v2.4.18 修复）**：官方 Bot 群聊下，状态图/背包图/图鉴图个人回复必须用
-  `event.chain_result(MessageChain().message(mention).file_image(path))` 把 @ 与图片合并为**一条消息**，
-  不能拆成「`plain_result(mention)` + `image_result(path)` 两条」（用户实测拆两条会感知为「有的消息@有的没有」bug）。
-  文本回复（钓鱼结果/签到/面板/`/选`）已用 `format_mention_reply(event, text)` 直接包 @，行为一致。
-  私聊/C2C 下 `format_mention_reply` 返回原文本（不 @，无意义）。`MessageChain` 需在 handler 顶部
-  `from astrbot.api.event import ..., MessageChain` 导入。
+- **⚠️ @ 提及「同一条消息」+ `chain_result` 铁律（v2.4.18→v2.4.19）**：
+  - 官方 Bot 群聊下，状态图/背包图/图鉴图个人回复必须把 @ 与图片合并为**一条消息**，不能拆成
+    「`plain_result(mention)` + `image_result(path)` 两条」（用户实测拆两条会感知为「有的消息@有的没有」bug）。
+  - **`event.chain_result(chain)` 的 `chain` 必须是 `List[BaseMessageComponent]`（组件列表），绝不能传 `MessageChain` 对象**！
+    AstrBot `result_decorate/stage.py` 对 `result.chain` 调 `len()`，`MessageChain` 无 `__len__` →
+    `TypeError: object of type 'MessageChain' has no len()`（v2.4.18 初版踩中）。正确写法：
+    `event.chain_result([Plain(mention), Image(file_path=path)])`；若坚持用 MessageChain 构造器，取列表用 `.chain`
+    （`MessageChain().message(mention).file_image(path).chain`）。
+  - handler 顶部导入：`from astrbot.api.message_components import Plain, Image`（**不是** `from astrbot.api.event import MessageChain`）。
+  - 文本回复（钓鱼结果/签到/面板/`/选`）已用 `format_mention_reply(event, text)` 直接包 @，行为一致。
+    私聊/C2C 下 `format_mention_reply` 返回原文本（不 @，无意义）。
+  - `main.py` 的 `MessageChain().file_image(...)` 走 `context.send_message` 低层接口（接受 MessageChain），不受影响。
 
 - **⚠️ 拟饵「是否消耗」看 `is_consumable`，不是 `duration_minutes`（2026-10-14 踩坑→修复）**：`fishing_service` 曾只按
   `duration_minutes==0` 判定「一次性鱼饵每次扣1」，导致亮片拟饵/大师拟饵（`is_consumable=False`「无消耗」但 `duration_minutes` 也=0）
