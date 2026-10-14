@@ -216,8 +216,14 @@ class FishingService:
         # 判断鱼饵是否过期
         if user.current_bait_id is not None:
             bait_template = self.item_template_repo.get_bait_by_id(cur_bait_id)
-            if bait_template and bait_template.duration_minutes > 0:
-                # 检查鱼饵是否过期
+            if bait_template is None:
+                # 鱼饵模板不存在，清除当前鱼饵
+                user.current_bait_id = None
+                user.bait_start_time = None
+                self.user_repo.update(user)
+                logger.warning(f"用户 {user_id} 的当前鱼饵已被清除，因为鱼饵模板不存在。")
+            elif bait_template.duration_minutes > 0:
+                # 限时鱼饵：检查是否过期
                 bait_expiry_time = user.bait_start_time
                 if bait_expiry_time:
                     now = get_now()
@@ -228,30 +234,28 @@ class FishingService:
                     if expiry_time.tzinfo is not None:
                         expiry_time = expiry_time.replace(tzinfo=None)
                     if now > expiry_time:
-                        # 鱼饵已过期，清除当前鱼饵
+                        # 限时鱼饵已过期，清除当前鱼饵；仅「可消耗」型才扣除库存
                         user.current_bait_id = None
                         user.bait_start_time = None
-                        self.inventory_repo.update_bait_quantity(user_id, cur_bait_id, -1)
+                        if bait_template.is_consumable:
+                            self.inventory_repo.update_bait_quantity(user_id, cur_bait_id, -1)
                         self.user_repo.update(user)
                         logger.warning(f"用户 {user_id} 的当前鱼饵{bait_template}已过期，已被清除。")
-            else:
-                if bait_template:
-                    # 如果鱼饵没有设置持续时间, 是一次性鱼饵，消耗一个鱼饵
-                    user_bait_inventory = self.inventory_repo.get_user_bait_inventory(user_id)
-                    if user_bait_inventory is not None and user_bait_inventory.get(user.current_bait_id, 0) > 0:
-                        self.inventory_repo.update_bait_quantity(user_id, user.current_bait_id, -1)
-                    else:
-                        # 如果用户没有库存鱼饵，清除当前鱼饵
-                        user.current_bait_id = None
-                        user.bait_start_time = None
-                        self.user_repo.update(user)
-                        logger.warning(f"用户 {user_id} 的当前鱼饵{bait_template.bait_id}已被清除，因为库存不足。")
+            elif bait_template.is_consumable:
+                # 一次性鱼饵（无持续时间）：每次钓鱼消耗一个
+                user_bait_inventory = self.inventory_repo.get_user_bait_inventory(user_id)
+                if user_bait_inventory is not None and user_bait_inventory.get(user.current_bait_id, 0) > 0:
+                    self.inventory_repo.update_bait_quantity(user_id, user.current_bait_id, -1)
                 else:
-                    # 如果鱼饵模板不存在，清除当前鱼饵
+                    # 库存不足，清除当前鱼饵
                     user.current_bait_id = None
                     user.bait_start_time = None
                     self.user_repo.update(user)
-                    logger.warning(f"用户 {user_id} 的当前鱼饵已被清除，因为鱼饵模板不存在。")
+                    logger.warning(f"用户 {user_id} 的当前鱼饵{bait_template.bait_id}已被清除，因为库存不足。")
+            else:
+                # 无消耗型拟饵（is_consumable=False，如 亮片拟饵 / 大师拟饵）：
+                # duration_minutes=0 且不消耗，长期有效，仅应用加成、绝不扣除库存。
+                logger.debug(f"用户 {user_id} 使用无消耗拟饵【{bait_template.name}】，不扣除库存。")
 
         if user.current_bait_id is None:
             # 随机获取一个库存鱼饵

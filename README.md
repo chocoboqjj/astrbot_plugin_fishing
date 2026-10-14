@@ -208,6 +208,7 @@
 - **展示同步**：`/状态`、`/钓鱼区域` 列表展示的稀有鱼用量改为**本人**当日计数（原为全局值）。全局计数器 `rare_fish_caught_today` 保留兼容但不再参与判定。
 
 **🐛 Bug 修复**
+- **修复「无消耗」拟饵被当成一次性鱼饵扣除（亮片拟饵 / 大师拟饵）**：`fishing_service` 的鱼饵消耗逻辑此前**只按 `duration_minutes == 0`** 判定「一次性鱼饵，每次钓鱼消耗 1 个」，完全没有读取 `is_consumable` 标记。而「亮片拟饵」「大师拟饵」这两个描述为「无消耗、可长期使用」的拟饵，其 `duration_minutes` 同为 0，导致它们**每次钓鱼都被扣 1 个**，与「无消耗」严重不符（用到归零即消失）。现改为按 `is_consumable` 判定：仅**可消耗型**（`is_consumable=True`，如蚯蚓/面包团/红虫）才在每次钓鱼扣 1；**无限拟饵**（`is_consumable=False`）只应用加成、**绝不扣库存**，可长期使用。限时鱼饵（如 30 分钟的驱散垃圾饵）过期时同样仅在可消耗型才扣除。已用真实代码块跑 6 类场景（无限 / 一次性有库存 / 一次性无库存 / 限时未过期 / 限时已过期 / 模板缺失）回归验证。
 - **修复 `_row_to_user` 未读取阶级列**：导致晋升成功但读回回落为默认值（落库阶级不变），已同步读取 `fishing_class_level` / `fishing_class_score`
 - **修复商店购买数量展示错误**：单份商品发放多件（如「玉米粒」每份给 5 个）时，`_give_rewards` 按购买份数逐次追加展示字符串再 `set()` 去重，导致「获得物品」只显示单份数量（买 5 份显示 x5，实际进背包 25 个）；标题也只显示购买份数。现改为按「单份数量 × 购买份数」汇总真实发放总量：物品/鱼饵/鱼/金币显示 `x{单份×份数}`，标题对单奖励商品追加「（共获得 N）」，多奖励商品标题保持购买份数、明细行各自显示总量。
 - **修复精炼崩溃 `'list' object has no attribute 'get'`**：`_find_refinement_candidate` 把精炼成功率表 `success_rates`（按精炼等级索引的 `list`，index 0 = 1 级）误当成 `dict` 调用 `.get(target_level, 1.0)`，当玩家拥有 ≥2 个同类型装备（候选循环被触发）时必抛 `TypeError` 中断处理。已改为按等级索引：`success_rate = success_rates[target_level-1]`（带 `1 <= target_level <= len(success_rates)` 边界保护，越界回退 1.0）。同时清理了 `refine` 中 `return refine_result` 之后的一段**不可达死代码**（重复的毁坏机制旧逻辑）。`core/services/inventory_service.py` 的 `refine` / `_find_refinement_candidate` / `_get_refine_config_by_rarity` 已用 6 星位 × 逐等级索引 + 鱼竿/饰品随机成功失败 的回归脚本验证无异常。

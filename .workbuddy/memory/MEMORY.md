@@ -39,6 +39,12 @@
   官方 Bot **无需额外后台配置**，按钮能否出现只取决于发送路径是否正确。代码见 `main.py::_send_qq_keyboard`、
   `core/menu.py::build_qq_keyboard`，发送为 best-effort，异常降级纯文本。
 
+- **⚠️ 拟饵「是否消耗」看 `is_consumable`，不是 `duration_minutes`（2026-10-14 踩坑→修复）**：`fishing_service` 曾只按
+  `duration_minutes==0` 判定「一次性鱼饵每次扣1」，导致亮片拟饵/大师拟饵（`is_consumable=False`「无消耗」但 `duration_minutes` 也=0）
+  每次钓鱼被扣到归零。已改为按 `is_consumable` 分流：一次性(True)每钓扣1；无限拟饵(False)只加加成、绝不扣库存；
+  限时(duration>0)过期才清，且仅 True 才扣。`is_consumable` 是真实持久化字段（`Bait` 模型/`baits` 表/迁移003）。
+  钓鱼消耗点仅 `fishing_service.py` 两处；`update_bait_quantity` 在 `quantity<=0` 会 DELETE 行，所以别对无限拟饵调它。
+
 ## 项目结构要点
 - 配置单一事实来源：`core/config_defaults.py`（`build_game_config()` 做容错与区间修正）
 - 配置流：`_conf_schema.json → AstrBotConfig → build_game_config → 各 Service`
