@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.13）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.14）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -44,6 +44,13 @@
   - 主操作「🎣 钓鱼」置 `style=1`(蓝主按钮)，其余 `style=0`(灰)。
   - 官方 Bot **无需额外后台配置**，按钮能否出现只取决于发送路径是否正确。代码见 `main.py::_send_qq_keyboard`、
     `core/menu.py::build_qq_keyboard`；发送为 best-effort，异常降级纯文本。结构经脚本逐项断言（行/列上限、字段必填、label≤10、取值）通过。
+  - **⚠️ 检测坑（v2.4.14 踩坑→修复）**：`/面板` 早期用 `platform_name == "qq_official"` 字符串**精确匹配**当门，
+    一旦 AstrBot 上报的 `platform_name` 字符串对不上，整段被跳过 → 只出「/选 N」纯文本菜单（典型现象：**头像能出、按钮没有**，
+    因为头像用 `raw_message` 真实类型判定、按钮却用了不可靠的字符串）。修复：主线检测与头像一致——
+    看 `event.message_obj.raw_message` 是否为 botpy `GroupMessage`/`C2CMessage`，命中即发；再用 `platform_name` 含 `qq_official`
+    子串兜底（兼容大小写/前后缀）。新增 `FishingPlugin._is_qq_official(event)`；`_send_qq_keyboard` 各静默失败点补 `logger.debug("[菜单] ...")`，
+    发送异常仍是 `logger.warning`。**若用户报「还是没按钮」，先让他查运行日志里的 `[菜单]` 行**——能直接看出是检测没过还是发送失败；
+    若连 `[菜单]` 都没有，说明根本没进 `quick_menu`（命令没被识别/别名问题）。
 - **⚠️ QQ 头像（2026-10-14 踩坑→修复→增强）**：`draw/utils.py::get_user_avatar(user_id, data_dir, avatar_size, event=None)`：
   - NapCat 等**纯数字 QQ 号**（`user_id.isdigit() and 5<=len<=12`）→ 走 `q4.qlogo.cn/headimg_dl?dst_uin={user_id}`。
   - **官方 Bot(openid)**：`user_id` 是 openid 而非 QQ 号，不能走 qlogo；但渲染时 handler 透传 `event`，

@@ -465,9 +465,8 @@ class FishingPlugin(Star):
         text = build_menu_text()
         kb = build_qq_keyboard()
         sent = False
-        # 仅在 QQ 官方 Bot 下尝试发送原生键盘按钮
-        platform_name = getattr(getattr(event, "platform_meta", None), "platform_name", "")
-        if kb and platform_name == "qq_official" and hasattr(event, "bot"):
+        # 仅在 QQ 官方 Bot 下尝试发送原生键盘按钮（检测方式与头像一致，避免 platform_name 字符串不匹配导致整段跳过）
+        if kb and self._is_qq_official(event) and hasattr(event, "bot"):
             sent = await self._send_qq_keyboard(event, text, kb)
         if not sent:
             yield event.plain_result(text)
@@ -503,6 +502,24 @@ class FishingPlugin(Star):
         async for r in method(event):
             yield r
 
+    def _is_qq_official(self, event) -> bool:
+        """判断当前消息是否来自 QQ 官方 Bot（qq_official）。
+
+        检测优先级与头像逻辑保持一致（已验证可用）：优先看 raw_message 真实类型——
+        官方 Bot 下是 botpy 的 GroupMessage / C2CMessage；再用 platform_name 兜底
+        （不同 AstrBot 版本字符串可能不同，故用 'qq_official' 子串匹配，避免 exact 匹配失效）。
+        """
+        raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
+        try:
+            import botpy.message
+
+            if isinstance(raw, (botpy.message.GroupMessage, botpy.message.C2CMessage)):
+                return True
+        except Exception:
+            pass
+        platform_name = getattr(getattr(event, "platform_meta", None), "platform_name", "") or ""
+        return "qq_official" in platform_name.lower()
+
     async def _send_qq_keyboard(self, event: AstrMessageEvent, text: str, kb: "Optional[dict]" = None) -> bool:
         """
         best-effort：通过 botpy 原生 HTTP 接口给官方 Bot 消息附加键盘按钮。
@@ -525,14 +542,17 @@ class FishingPlugin(Star):
             import botpy.message
             from botpy.http import Route
             from botpy.types.message import MarkdownPayload
-        except Exception:
+        except Exception as e:
+            logger.debug(f"[菜单] 官方Bot键盘不可用（botpy 未安装）：{e}")
             return False
 
         bot = getattr(event, "bot", None)
         if bot is None or getattr(bot, "api", None) is None:
+            logger.debug("[菜单] 官方Bot键盘跳过：event.bot / bot.api 缺失（非官方Bot上下文）")
             return False
         raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
         if raw is None:
+            logger.debug("[菜单] 官方Bot键盘跳过：message_obj.raw_message 缺失")
             return False
 
         content = text or "\u200b"  # QQ 键盘消息要求 markdown content 非空，空则用零宽占位
@@ -561,6 +581,10 @@ class FishingPlugin(Star):
                     openid=raw.author.user_openid,
                 )
             else:
+                logger.debug(
+                    f"[菜单] 官方Bot键盘跳过：raw_message 类型 {type(raw).__name__} "
+                    f"既不是 GroupMessage 也不是 C2CMessage"
+                )
                 return False
 
             await bot.api._http.request(route, json=payload)

@@ -175,6 +175,7 @@
     只取决于发送路径是否正确。）
   - 该发送为 best-effort，任意异常均降级为纯文本菜单，不影响其它功能。
   - **协议对齐（v2.4.13）**：键盘结构严格对齐官方「消息按钮」协议（`bot.q.qq.com/.../msg-btn.html`）：长格式 `keyboard={"content":{"rows":[...]}}`、最多 5 行 × 每行 5 按钮；`render_data.label` 上限 **10 字符**（当前按钮文案均 ≤10 字）；主操作「🎣 钓鱼」置为蓝色主按钮(style=1)、其余灰色；`action.type=2`(指令按钮：客户端自动在输入框插入 `@bot data`)+`permission.type=2`(所有人可点)+`enter=true`(单聊点击直接自动发送，群聊下被忽略、仅把指令填入输入框)。结构经脚本逐项校验（行/列上限、字段必填、label 长度）通过。
+  - **检测修复（v2.4.14）**：早期用 `platform_name == "qq_official"` 字符串精确匹配决定是否发按钮，一旦 AstrBot 上报的 `platform_name` 字符串不一致，整段被跳过、只降级成纯文本菜单（现象：头像能出、按钮没有）。改为主线检测与头像一致——看 `message_obj.raw_message` 真实类型是否为 botpy `GroupMessage` / `C2CMessage`，再用 `platform_name` 含 `qq_official` 子串兜底（兼容大小写/前后缀），任一命中即发按钮。`_send_qq_keyboard` 各静默失败点补了 debug 日志，若仍失败可在运行日志看到 `[菜单]` 前缀的具体原因。
 
 **🎖️ 新功能：钓鱼阶级系统（段位制 · 纯增益型）**
 

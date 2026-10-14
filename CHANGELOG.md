@@ -1,5 +1,15 @@
 # 📦 更新记录
 
+## v2.4.14 (官方 Bot 键盘按钮「整段被跳过」修复：检测与头像对齐)
+- **🐛 修复 `/面板` 在 QQ 官方 Bot 下只出纯文本、不出按钮**：早期 `quick_menu` 用 `platform_name == "qq_official"` 字符串精确匹配决定是否发原生键盘；一旦 AstrBot 上报的 `platform_name` 字符串对不上，整段被跳过、直接降级成「/选 N」纯文本菜单（典型现象：头像能出、按钮没有——因为头像检测走的是 `raw_message` 真实类型、按钮检测却走了不可靠的字符串）。
+  - 改为主线检测与头像逻辑一致：看 `event.message_obj.raw_message` 是否为 botpy `GroupMessage` / `C2CMessage`，命中即发按钮；再用 `platform_name` 含 `qq_official` 子串兜底（兼容大小写/前后缀）。
+  - 新增 `FishingPlugin._is_qq_official(event)` 统一该判定。
+  - `_send_qq_keyboard` 各静默失败点（botpy 未装 / bot.api 缺失 / raw_message 缺失 / raw 类型非 Group/C2C）补 `logger.debug("[菜单] ...")`，若发送仍失败，运行日志可看到具体原因（发送异常仍是 `logger.warning`）。
+  - 影响范围：`main.py::quick_menu` / `_is_qq_official` / `_send_qq_keyboard`。`build_qq_keyboard`（v2.4.13 已对齐官方协议）不变。
+  - 校验：`py_compile main.py` 通过；`_is_qq_official` 分支单测（raw_message 类型检测 + platform_name 子串兜底，覆盖官方/非官方/大小写/前后缀）全绿。
+
+---
+
 ## v2.4.13 (官方 Bot 键盘按钮对齐官方「消息按钮」协议)
 - **📐 对齐官方协议**：`/面板` 的 QQ 官方 Bot 原生键盘按钮按 `bot.q.qq.com` 的「消息按钮」协议（`server-inter/message/trans/msg-btn.html`）与群/单聊发送接口规范梳理并修正：
   - `keyboard` 长格式 = `{"content": {"rows": [{"buttons": [...]}]}}`，行/列上限收紧为官方约定的 **5 行 × 每行 5 个**（当前 10 个按钮 = 4 行 × 3 个，合规）。
