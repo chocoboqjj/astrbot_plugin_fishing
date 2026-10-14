@@ -88,8 +88,9 @@ class AddWipeBombAttemptsEffect(AbstractItemEffect):
         remaining_today = max(0, total_max_attempts - used_attempts_today)
 
         message = (
-            f"🎫 你获得 {total_attempts_to_add} 次额外擦弹机会。"
-            f"今天剩余擦弹次数：{remaining_today} 次 ({used_attempts_today}/{total_max_attempts})"
+            f"🎫 获得 +{total_attempts_to_add} 次额外擦弹机会"
+            f"（今日擦弹加成累计 {extra_attempts_after_update} 次）。\n"
+            f"今天剩余擦弹次数：{remaining_today} 次（已用 {used_attempts_today} / 上限 {total_max_attempts}）"
         )
         
         return {"success": True, "message": message}
