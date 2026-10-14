@@ -1,5 +1,18 @@
 # 📦 更新记录
 
+## v2.4.13 (官方 Bot 键盘按钮对齐官方「消息按钮」协议)
+- **📐 对齐官方协议**：`/面板` 的 QQ 官方 Bot 原生键盘按钮按 `bot.q.qq.com` 的「消息按钮」协议（`server-inter/message/trans/msg-btn.html`）与群/单聊发送接口规范梳理并修正：
+  - `keyboard` 长格式 = `{"content": {"rows": [{"buttons": [...]}]}}`，行/列上限收紧为官方约定的 **5 行 × 每行 5 个**（当前 10 个按钮 = 4 行 × 3 个，合规）。
+  - `render_data.label` / `visited_label` 必填，截断上限由 30 改为官方 **10 字符**（当前按钮文案均 ≤10 字，不触发截断，但口径对齐）。
+  - 主操作「🎣 钓鱼」置为蓝色主按钮（`style=1`），其余灰色（`style=0`）。
+  - `action.type=2`（指令按钮：客户端自动在输入框插入 `@bot data`）+ `action.permission.type=2`（所有人可点）+ `action.enter=true`（单聊点击直接自动发送，群聊下被忽略、仅把指令填入输入框）；`data` = `/指令`。
+  - 发送侧（`main.py::_send_qq_keyboard`）维持 botpy 原生 HTTP 路由（`bot.api._http.request`，绕开 botpy 封装注入 `null` 导致 `invalid content` 的坑），路由 `POST /v2/groups/{group_openid}/messages` 与 `POST /v2/users/{openid}/messages`，`msg_type=2`(markdown) + `keyboard` 同体，`msg_id` 被动回复 + `msg_seq` 默认 1。docstring 补官方文档链接。
+  - 影响范围：`core/menu.py::build_qq_keyboard`（结构/字段/截断/style）、`main.py::_send_qq_keyboard`（docstring 补官方协议出处）。
+  - 校验：新增结构断言脚本（行/列上限、字段必填、label≤10、type/permission/enter 取值），全部通过；`pyflakes` 干净。
+  - 非官方 Bot（NapCat 等）仍走 `/选 N` 纯文本降级，行为不变。
+
+---
+
 ## v2.4.12 (擦弹许可证回执上限漏算阶级加成修复)
 - **🐛 修复【擦弹许可证】回执「上限」漏算阶级加成**：回执里的「今天剩余 / 已用 / 上限」之前只按 `基础次数 + buff加成` 算上限，**没有加上阶级系统的每日擦弹加成**（`wipe_bomb_bonus`，各阶级 +1~+8）。
   - 现象：有阶级加成的玩家，回执显示的上限比 `/擦弹` 实际能擦的次数小，剩余次数被少算（例如基础3 + 许可3 + 阶级1，回执显示上限6、剩余2，但真实可擦上限是7、剩余应为3），造成「我加了3次怎么只剩2次」的困惑。

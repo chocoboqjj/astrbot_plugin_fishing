@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.12）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.13）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -25,7 +25,7 @@
   `utils.find_mentioned_user_id` 必须：跳过 `qq_official` 哨兵 + 文本正则匹配字母数字 openid +
   群消息约定「@机器人 @目标」取最后一个为目标。曾因只匹配 `[0-9]+` 且未跳过哨兵导致 @指令失效（已修）。
 - **平台硬限制（插件无法修）**：qq_official 不支持 Reply 段 → 回复无法引用原消息；At 已由文本解析绕过，@人可用。
-- **⚠️ qq_official 原生按钮（2026-10-13 踩坑→修复）**：AstrBot `qq_official` 适配器 `_post_send`/`_parse_to_qqofficial`
+- **⚠️ qq_official 原生按钮（2026-10-13 踩坑→修复→v2.4.13 对齐官方协议）**：AstrBot `qq_official` 适配器 `_post_send`/`_parse_to_qqofficial`
   只处理 Plain/Image/Record，Button 组件被 `else: 忽略` 丢弃。原生按钮必须走 botpy 键盘 API。
   **致命坑**：botpy 的 `post_group_message(..., keyboard=...)` 封装会注入大量 `null` 字段 → QQ 接口报 `invalid content`
   → 按钮永不渲染、被静默降级为纯文本（日志只有一行 `[菜单] 官方Bot键盘发送失败…` WARNING）。
@@ -34,10 +34,16 @@
   `payload = {"msg_type":2, "markdown":{"content":文本}, "msg_id":源消息id, "keyboard":{...}, "msg_seq":1}`；
   群消息 `Route("POST","/v2/groups/{group_openid}/messages", group_openid=...)`，
   C2C `Route("POST","/v2/users/{openid}/messages", openid=raw.author.user_openid)`。
-  键盘按钮 `action.type=2`+`permission.type=2`+`data="/指令"`+`at_bot_show_channel_list=False`+`enter=True`
-  （`enter` 不在 botpy 的 Action TypedDict 里，但走 raw JSON 会被转发；不支持时按钮仍会填入输入框）。
-  官方 Bot **无需额外后台配置**，按钮能否出现只取决于发送路径是否正确。代码见 `main.py::_send_qq_keyboard`、
-  `core/menu.py::build_qq_keyboard`，发送为 best-effort，异常降级纯文本。
+  官方「消息按钮」协议（`bot.q.qq.com/.../msg-btn.html`，v2.4.13 起严格对齐）：
+  - 键盘长格式 `{"content": {"rows": [{"buttons": [...]}]}}`，**最多 5 行 × 每行 5 个**按钮。
+  - 每个 button：`id`(键盘内唯一) + `render_data{label, visited_label(必填), style(0灰/1蓝)}` + `action{type, permission, data, enter}`。
+  - `render_data.label` / `visited_label` **最多 10 字符**（按钮文案控制在 10 字内）。
+  - `action.type=2`(指令按钮：客户端自动在输入框插入 `@bot data`) + `action.permission.type=2`(所有人可点) +
+    `action.data="/指令"` + `action.enter=True`(单聊点击直接自动发送；**群聊下 enter 被忽略**，按钮仅把指令填入输入框，玩家需手动发送)。
+  - `at_bot_show_channel_list` 官方已标记弃用，保留 `False`（默认行为，无害）。
+  - 主操作「🎣 钓鱼」置 `style=1`(蓝主按钮)，其余 `style=0`(灰)。
+  - 官方 Bot **无需额外后台配置**，按钮能否出现只取决于发送路径是否正确。代码见 `main.py::_send_qq_keyboard`、
+    `core/menu.py::build_qq_keyboard`；发送为 best-effort，异常降级纯文本。结构经脚本逐项断言（行/列上限、字段必填、label≤10、取值）通过。
 - **⚠️ QQ 头像（2026-10-14 踩坑→修复→增强）**：`draw/utils.py::get_user_avatar(user_id, data_dir, avatar_size, event=None)`：
   - NapCat 等**纯数字 QQ 号**（`user_id.isdigit() and 5<=len<=12`）→ 走 `q4.qlogo.cn/headimg_dl?dst_uin={user_id}`。
   - **官方 Bot(openid)**：`user_id` 是 openid 而非 QQ 号，不能走 qlogo；但渲染时 handler 透传 `event`，

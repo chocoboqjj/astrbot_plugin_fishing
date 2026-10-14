@@ -513,6 +513,13 @@ class FishingPlugin(Star):
         可正常渲染按钮（参考 astrbot_plugin_keyword）。
 
         键盘必须挂在 msg_type=2 的 markdown 消息上。任意失败均降级返回 False（由调用方回退纯文本）。
+
+        官方协议参考：
+        - 消息按钮结构：https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/trans/msg-btn.html
+        - 发送群消息：https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_messages.post.html
+        - 发送单聊消息：https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_messages.post.html
+          （路由 /v2/groups/{group_openid}/messages 与 /v2/users/{openid}/messages；
+           msg_type=2=markdown，keyboard 与 markdown 同体；msg_id 被动回复，msg_seq 默认 1）
         """
         try:
             import botpy.message

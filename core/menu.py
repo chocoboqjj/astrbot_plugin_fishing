@@ -30,6 +30,10 @@ MENU_ITEMS: List[Dict[str, str]] = [
 # 官方 Bot 键盘每行按钮数（官方限制 5×5，这里 3 个一行，10 项 = 4 行）
 _BUTTONS_PER_ROW = 3
 
+# 官方规范：render_data.label / visited_label 最多 10 字符
+# 参考：https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/trans/msg-btn.html
+_LABEL_MAX = 10
+
 
 def build_menu_text() -> str:
     """生成编号菜单文本（纯文本降级方案用）。"""
@@ -60,14 +64,17 @@ def build_qq_keyboard() -> "Optional[dict]":
     """
     构造 QQ 官方 Bot 键盘 payload（dict，直接挂到 markdown 消息的 keyboard 字段）。
 
-    按钮 action.type=2（输入框按钮）+ enter=true（点击后把 data 作为消息自动发送），
-    由 AstrBot 正常分发执行，等同用户手打该指令；即便接口不支持 enter，也至少会把
-    指令填入输入框，玩家无需手打。
+    严格对齐官方「消息按钮」协议（https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/trans/msg-btn.html）：
+    - keyboard 长格式 = {"content": {"rows": [{"buttons": [...]}]}}，最多 5 行 × 每行 5 个按钮。
+    - 每个 button：id（键盘内唯一）、render_data.label/visited_label（必填，最多 10 字符）、
+      render_data.style（0 灰 / 1 蓝）、action.type=2（指令按钮，自动在输入框插入 @bot data）、
+      action.permission.type=2（所有人可点）、action.data（指令内容）、
+      action.enter（点击直接自动发送，仅单聊可用；群聊下被忽略，按钮仅把指令填入输入框）。
+    - 键盘必须挂在 msg_type=2 的 markdown 消息上，且走 botpy 原生 HTTP 路由
+      （bot.api._http.request，见 main.py::_send_qq_keyboard）才能绕开 botpy 封装注入的
+      null 字段导致接口校验失败（invalid content）。
 
     返回 {"content": {"rows": [...]}}；失败时返回 None。
-    结构对齐已验证可在 qq_official 上渲染的 astrbot_plugin_keyword 实现：
-    键盘必须挂在 msg_type=2 的 markdown 消息上，且走 botpy 原生 HTTP 路由
-    （bot.api._http.request）才能避免 botpy 封装注入的 null 字段导致接口校验失败。
     """
     try:
         rows: List[Dict] = []
@@ -77,22 +84,24 @@ def build_qq_keyboard() -> "Optional[dict]":
             for item in MENU_ITEMS[i : i + _BUTTONS_PER_ROW]:
                 button_id += 1
                 label = item["label"]
-                if len(label) > 30:
-                    label = label[:30] + "…"
+                if len(label) > _LABEL_MAX:
+                    label = label[: _LABEL_MAX] + "…"
+                # 第一个（钓鱼）作为主按钮高亮为蓝色，其余灰色
+                style = 1 if button_id == 1 else 0
                 buttons.append(
                     {
                         "id": str(button_id),
                         "render_data": {
                             "label": label,
                             "visited_label": label,
-                            "style": 0,  # 0=灰（次按钮），1=蓝（主按钮）
+                            "style": style,
                         },
                         "action": {
-                            "type": 2,  # 输入框按钮
+                            "type": 2,  # 指令按钮：自动在输入框插入 @bot data
                             "permission": {"type": 2},  # 所有人可点
-                            "data": "/" + item["cmd"],  # 点击/自动发送的内容
-                            "at_bot_show_channel_list": False,  # 不弹 @bot 频道列表，直接填充 data
-                            "enter": True,  # 点击后把 data 作为消息自动发送（等同手打并回车）
+                            "data": "/" + item["cmd"],  # 点击/自动发送的内容（@bot 由客户端自动加）
+                            "at_bot_show_channel_list": False,  # 不弹频道选择器，直接填充 data（官方已标记弃用，保留为默认行为）
+                            "enter": True,  # 点击后把 data 作为消息自动发送（等同手打并回车；群聊下被忽略）
                         },
                     }
                 )
