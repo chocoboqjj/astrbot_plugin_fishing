@@ -1,7 +1,7 @@
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api import logger
 from ..core.utils import get_now
-from ..utils import safe_datetime_handler, to_percentage, safe_get_file_path
+from ..utils import safe_datetime_handler, to_percentage, safe_get_file_path, format_mention_reply
 from ..draw.pokedex import draw_pokedex
 from astrbot.api.message_components import Image as AstrImage
 from typing import TYPE_CHECKING
@@ -107,7 +107,7 @@ class FishingHandlers:
         if not result:
             yield event.plain_result("❌ 出错啦！请稍后再试。")
             return
-        yield event.plain_result(_build_fish_message(result, fishing_cost))
+        yield event.plain_result(format_mention_reply(event, _build_fish_message(result, fishing_cost)))
 
     async def auto_fish(self, event: AstrMessageEvent):
         """自动钓鱼"""

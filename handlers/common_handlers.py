@@ -3,7 +3,7 @@ from astrbot.api.event import filter, AstrMessageEvent
 from ..draw.help import draw_help_image
 from ..draw.state import draw_state_image, get_user_state_data
 from ..core.utils import get_now
-from ..utils import safe_datetime_handler, parse_target_user_id, parse_amount
+from ..utils import safe_datetime_handler, parse_target_user_id, parse_amount, format_mention_reply
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ async def sign_in(self: "FishingPlugin", event: AstrMessageEvent):
     user_id = self._get_effective_user_id(event)
     result = self.user_service.daily_sign_in(user_id)
     if result["success"]:
-        yield event.plain_result(result["message"])
+        yield event.plain_result(format_mention_reply(event, result["message"]))
 
 async def fishing_class(self: "FishingPlugin", event: AstrMessageEvent):
     """查看钓鱼阶级（段位制·纯增益型）"""
@@ -63,6 +63,10 @@ async def state(self: "FishingPlugin", event: AstrMessageEvent):
     # 保存图像到临时文件
     image_path = os.path.join(self.tmp_dir, "user_status.png")
     image.save(image_path)
+    # 群聊下先 @ 发送方，再发图片，便于分辨是谁的状态
+    _mention = format_mention_reply(event, "")
+    if _mention:
+        yield event.plain_result(_mention)
     yield event.image_result(image_path)
 
 async def fishing_log(self: "FishingPlugin", event: AstrMessageEvent):

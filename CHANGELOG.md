@@ -1,5 +1,19 @@
 # 📦 更新记录
 
+## v2.4.17 (群聊回复 @ 发送方：仅关键回复)
+- **✨ 群聊下回复 @ 触发指令的玩家**：新增 `utils.format_mention_reply(event, text)`——群聊（`event.get_group_id()` 非空）时在回复文本前拼接发送方 @ 提及，私聊/C2C 原样返回（@ 无意义）。
+  - 官方 Bot(openid，非纯数字)：`<@!openid>`（QQ 官方 Bot 内联提及语法，平台渲染成可点 @）。
+  - NapCat/aiocqhttp(纯数字 QQ 号)：`[CQ:at,qq=...]`。
+  - 发送方身份统一取 `event.get_sender_id()`（官方 Bot 返回 openid、NapCat 返回 QQ 号，与头像判定一致）。
+- **应用范围（仅关键高频回复，按用户选择）**：
+  - 文本回复：钓鱼结果（`fishing_handlers.fish`）、签到（`common_handlers.sign_in`）、快捷面板纯文本降级与 `/选` 选择结果（`main.py::quick_menu`/`quick_select`）。
+  - 图片回复：状态图（`common_handlers.state`）、背包图（`inventory_handlers.user_backpack`）——图片前先发一条仅 @ 的文本，再发图片，便于群聊分辨是谁的状态/背包。
+- **不做的**：回复「引用原消息」（Reply 段）在 `qq_official` 下平台不支持（适配器 `_post_send` 只认 Plain/Image/Record，Reply 被丢弃），故只做 @ 提及，不做引用气泡。
+- 影响范围：`utils.py`（新增 helper）、`fishing_handlers.py`/`common_handlers.py`/`inventory_handlers.py`/`main.py`（关键回复包 @）。
+- 校验：`py_compile` 五个文件通过；`format_mention_reply` 单测覆盖 官方Bot群聊/NapCat群聊/私聊原样/空文本仅@/缺方法兜底 6 类全绿。
+
+---
+
 ## v2.4.16 (面板精简：去掉多余描述 + 按钮 data 去 / 前缀)
 - **🧹 面板文本精简**：`/面板` 纯文本降级内容去掉冗余描述——删除「例：发送「/选 1」即开始钓鱼。」与「📱 QQ 官方 Bot 下可直接点上方按钮，无需手打。」两行；编号列表也不再逐行带「→ /指令」，只保留「🎮 钓鱼快捷面板」标题 + 10 项编号列表 + 一行「回复 /选 N 执行对应指令」提示。`core/menu.py::build_menu_text` 重写。
 - **⌨️ 官方 Bot 键盘按钮 `data` 去 `/` 前缀**：`build_qq_keyboard` 中按钮 `action.data` 由 `"/" + cmd` 改为 `cmd`（纯指令词，如 `钓鱼` 而非 `/钓鱼`）。点击/自动发送的内容即指令本名，客户端仍自动补 `@bot`。`core/menu.py::build_qq_keyboard`。

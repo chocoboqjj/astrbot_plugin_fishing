@@ -46,6 +46,7 @@ from .core.qq_official import (  # noqa: E402 官方 Bot 多信号检测（按�
     get_official_route_target,
     get_message_id,
 )
+from .utils import format_mention_reply  # noqa: E402 群聊回复 @ 发送方
 
 # ==========================================================
 # 导入所有指令函数
@@ -474,7 +475,7 @@ class FishingPlugin(Star):
         if kb and self._is_qq_official(event) and hasattr(event, "bot"):
             sent = await self._send_qq_keyboard(event, text, kb)
         if not sent:
-            yield event.plain_result(text)
+            yield event.plain_result(format_mention_reply(event, text))
 
     @filter.command("选", alias={"快捷选", "m"})
     async def quick_select(self, event: AstrMessageEvent):
@@ -491,19 +492,19 @@ class FishingPlugin(Star):
                 arg = arg[len(prefix):].strip()
                 break
         if not arg.isdigit():
-            yield event.plain_result("用法：/选 <序号>，例如 /选 1 开始钓鱼。先发 /面板 查看编号。")
+            yield event.plain_result(format_mention_reply(event, "用法：/选 <序号>，例如 /选 1 开始钓鱼。先发 /面板 查看编号。"))
             return
         idx = int(arg)
         cmd = get_menu_cmd(idx)
         method_name = get_menu_method(idx)
         if not cmd or not method_name:
-            yield event.plain_result(f"序号 {idx} 超出范围，请发 /面板 查看可用项（共 {len(MENU_ITEMS)} 项）。")
+            yield event.plain_result(format_mention_reply(event, f"序号 {idx} 超出范围，请发 /面板 查看可用项（共 {len(MENU_ITEMS)} 项）。"))
             return
         method = getattr(self, method_name, None)
         if method is None:
-            yield event.plain_result("⚠️ 该指令暂不可通过面板执行，请直接发送 /" + cmd)
+            yield event.plain_result(format_mention_reply(event, "⚠️ 该指令暂不可通过面板执行，请直接发送 /" + cmd))
             return
-        yield event.plain_result(f"⚡ 执行：/{cmd}")
+        yield event.plain_result(format_mention_reply(event, f"⚡ 执行：/{cmd}"))
         async for r in method(event):
             yield r
 

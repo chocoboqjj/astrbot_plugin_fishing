@@ -11,6 +11,41 @@ import asyncio
 
 from astrbot.api import logger
 
+
+def format_mention_reply(event, text: str) -> str:
+    """群聊下在回复文本前拼接发送方 @ 提及，私聊/异常原样返回。
+
+    用途：让机器人在群聊里 @ 触发指令的玩家，避免多人时分辨不出是谁的回复。
+    - 官方 Bot(openid，非纯数字)：`<@!openid>`（QQ 官方 Bot 内联提及语法，平台会渲染成可点 @）。
+    - NapCat / aiocqhttp(纯数字 QQ 号)：`[CQ:at,qq=...]`。
+    - 私聊 / C2C：`get_group_id()` 为空，不 @（无意义）。
+    text 为空时（如图片回复前想单独 @）只返回提及串本身。
+    """
+    try:
+        if hasattr(event, "get_group_id"):
+            gid = event.get_group_id()
+        else:
+            gid = getattr(getattr(event, "message_obj", None), "group_id", None)
+    except Exception:
+        gid = None
+    if not gid:
+        return text
+    try:
+        sender = event.get_sender_id()
+    except Exception:
+        sender = None
+    if not sender:
+        return text
+    sender = str(sender)
+    if sender.isdigit():
+        mention = f"[CQ:at,qq={sender}]"
+    else:
+        mention = f"<@!{sender}>"
+    if text:
+        return f"{mention}\n{text}"
+    return mention
+
+
 async def get_local_ip():
     """异步获取内网IPv4地址"""
     try:
