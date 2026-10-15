@@ -233,7 +233,7 @@ class FishingHandlers:
             # 群聊下在「同一条消息」里 @ 发送方 + 发图片（与个人状态/背包一致）
             _mention = format_mention_reply(event, "")
             if _mention:
-                yield event.chain_result([Plain(_mention), Image(file_path=output_path)])
+                yield event.chain_result([Plain(_mention), Image(file=output_path)])
             else:
                 yield event.image_result(output_path)
         except Exception as e:

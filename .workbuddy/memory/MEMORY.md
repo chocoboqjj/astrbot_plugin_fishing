@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.20）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.21）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -78,8 +78,9 @@
   - **`event.chain_result(chain)` 的 `chain` 必须是 `List[BaseMessageComponent]`（组件列表），绝不能传 `MessageChain` 对象**！
     AstrBot `result_decorate/stage.py` 对 `result.chain` 调 `len()`，`MessageChain` 无 `__len__` →
     `TypeError: object of type 'MessageChain' has no len()`（v2.4.18 初版踩中）。正确写法：
-    `event.chain_result([Plain(mention), Image(file_path=path)])`；若坚持用 MessageChain 构造器，取列表用 `.chain`
-    （`MessageChain().message(mention).file_image(path).chain`）。
+    `event.chain_result([Plain(mention), Image(file=path)])`；⚠️ **`Image` 构造参数是 `file`，不是 `file_path`**
+    （v2.4.19 误写 `file_path` 触发 `Image.__init__() missing 1 required positional argument: 'file'`，v2.4.21 修正）。
+    若坚持用 MessageChain 构造器，取列表用 `.chain`（`MessageChain().message(mention).file_image(path).chain`）。
   - handler 顶部导入：`from astrbot.api.message_components import Plain, Image`（**不是** `from astrbot.api.event import MessageChain`）。
   - 文本回复（钓鱼结果/签到/面板/`/选`）已用 `format_mention_reply(event, text)` 直接包 @，行为一致。
     私聊/C2C 下 `format_mention_reply` 返回原文本（不 @，无意义）。

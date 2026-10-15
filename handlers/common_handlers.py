@@ -67,7 +67,7 @@ async def state(self: "FishingPlugin", event: AstrMessageEvent):
     # 群聊下在「同一条消息」里 @ 发送方 + 发图片（避免拆成两条）
     _mention = format_mention_reply(event, "")
     if _mention:
-        yield event.chain_result([Plain(_mention), Image(file_path=image_path)])
+        yield event.chain_result([Plain(_mention), Image(file=image_path)])
     else:
         yield event.image_result(image_path)
 

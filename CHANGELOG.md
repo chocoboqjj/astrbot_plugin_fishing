@@ -1,5 +1,17 @@
 # 📦 更新记录
 
+## v2.4.21 (修复 Image 构造参数写成 file_path 导致崩溃)
+- **🐛 修复 `/状态` 等图片回复崩溃**：v2.4.19 把图片回复写成 `Image(file_path=path)`，运行期报
+  `Image.__init__() missing 1 required positional argument: 'file'`。根因：该 AstrBot 版本的 `Image` 消息组件
+  构造参数是 **`file`**（本地文件路径），**不是 `file_path`**（`file_path` 不是有效参数，故缺必填的 `file`）。
+  - 正确写法：`Image(file=path)`（与 `event.image_result(path)` 内部构造一致）。
+  - 三处统一修正：`common_handlers.state`、`inventory_handlers.user_backpack`、`fishing_handlers.pokedex` 的
+    `Image(file_path=...)` → `Image(file=...)`。`Plain(mention)` 不受影响（已验证）。
+  - 校验：`py_compile` 三个 handler 通过。
+- 影响范围：仅三个 handler 的 `Image(...)` 调用参数名；逻辑、导入、`chain_result` 列表形式均不变。
+
+---
+
 ## v2.4.20 (按钮 data 恢复带 / 前缀)
 - **🖲️ 官方 Bot 键盘按钮 `data` 恢复 `/` 前缀**：按用户要求，把 v2.4.16 去掉的 `/` 前缀加回来——
   `core/menu.py::build_qq_keyboard` 中按钮 `action.data` 由 `item["cmd"]`（纯指令词如 `钓鱼`）
@@ -18,7 +30,7 @@
   `TypeError: object of type 'MessageChain' has no len()`（AstrBot v4.28.1 `result_decorate/stage.py` 对
   `result.chain` 调 `len()`）。根因：`chain_result(chain)` 把入参**原样**存为 `result.chain`，框架要求其是
   **消息组件列表**，而非 `MessageChain` 对象（`MessageChain` 无 `__len__`）。
-  - 正确写法：`event.chain_result([Plain(mention), Image(file_path=path)])`（列表形式）。
+  - 正确写法：`event.chain_result([Plain(mention), Image(file=path)])`（列表形式；`Image` 的构造参数是 `file`，不是 `file_path`）。
   - 三处统一改为列表形式：`common_handlers.state`、`inventory_handlers.user_backpack`、`fishing_handlers.pokedex`；
     handler 顶部导入由 `from astrbot.api.event import ..., MessageChain` 改为
     `from astrbot.api.message_components import Plain, Image`。（`main.py` 的 `MessageChain().file_image(...)` 走
