@@ -323,9 +323,9 @@ async def _draw_backpack_image_impl(user_data: Dict[str, Any], data_dir: str, ev
             col1_x = col1_x_with_avatar # 更新 col1_x 以适应头像位置
             col2_x = col1_x + 300  # 头像存在时，第二列起点随之右移
 
-    # 用户昵称
+    # 用户昵称（顶部绘制，作为群聊回复的归属「提及」；官方 Bot 图片消息无法内嵌 @，故画在图上）
     nickname = user_data.get('nickname', '未知用户')
-    nickname_text = f"{nickname}"
+    nickname_text = f"👤 {nickname}"
     draw.text((col1_x, row1_y), nickname_text, font=subtitle_font, fill=primary_medium)
     
     # 统计信息 + 装备总价值（用户名下方横向排布）

@@ -107,8 +107,8 @@ async def draw_pokedex(pokedex_data: Dict[str, Any], user_info: Dict[str, Any], 
             img.paste(avatar_image, (header_x, header_y), avatar_image)
             header_x += avatar_size + 20  # 头像存在时，标题向右偏移
     
-    # 标题 - 使用背包颜色，调整到头像中间位置
-    header_text = f"{user_info.get('nickname', '玩家')}的图鉴"
+    # 标题 - 使用背包颜色，调整到头像中间位置（昵称前缀 👤 作为群聊回复的归属「提及」）
+    header_text = f"👤 {user_info.get('nickname', '玩家')}的图鉴"
     draw.text((header_x, header_y + 12), header_text, font=FONT_HEADER, fill=primary_dark)
 
     # 进度 - 使用背包颜色

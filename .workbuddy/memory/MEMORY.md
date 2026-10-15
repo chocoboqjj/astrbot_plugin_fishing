@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.22）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.23）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -72,23 +72,23 @@
       `group_openid`/`member_openid` 取值与当前 AstrBot 版本结构不符，贴该行即可定位。
   - 非官方 Bot / 无 `event` / 接口异常 → **静默降级**（debug 日志、不报错），状态/背包/图鉴照常渲染（仅不显示头像）。
   - 调用链：`common_handlers`(状态) / `inventory_handlers`(背包) / `fishing_handlers`(图鉴) → `draw_state_image`/`draw_backpack_image`/`draw_pokedex` 均 `event=event` 透传给 `get_user_avatar`。
-- **⚠️ @ 群成员渲染（v2.4.22 根因修复，对照 QQ 官方 Bot 文档）**：
+- **⚠️ @ 群成员渲染 + 回复归属（v2.4.22 起，v2.4.23 按新规收敛）**：
   - **根因（此前「@ 仍不正确」的真因）**：`<@!openid>` 写在**普通文本回复**（`msg_type=0` / `Plain` 组件）里。
     QQ 官方 Bot **只把 Markdown(`msg_type=2`) 的 `markdown.content` 中的 `<@!openid>` 渲染成可点 @**；
     纯文本里的 `<@!openid>` 会被当成普通字符串显示（即用户看到的「字面 @ 不生效」）。
-  - **改法（严格对齐官方规范）**：官方 Bot 群聊下，文本个人回复（钓鱼结果/签到/面板/`/选`）走 `msg_type=2` markdown，
-    把 `<@!openid>\n{文本}` 写进 `markdown.content`（复用 `_send_qq_keyboard` 已验证的 botpy 原生 HTTP 通道）。
-    逻辑收敛到 `main.py::send_mention_text`；图片回复走 `send_mention_then_image`。
-  - **平台硬限制（务必记得）**：图片消息是 `msg_type=7`，**无法内嵌 @**。所以官方 Bot 群聊的图片回复（状态/背包/图鉴）
-    只能「先 markdown `<@!openid>` 渲染 @，再发图片」两条消息——这是平台限制，不是 bug。非官方 Bot / 私聊仍
-    `chain_result([Plain(CQ:at), Image])` 或纯图，不受影响。
-  - **双被动回复 `msg_seq` 风险（排障）**：官方 Bot 群聊图片回复 = 我方 botpy 发 markdown(seq=1) + 框架发图片。
-    若框架也用同 `(msg_id, msg_seq=1)` 被动回复，可能冲突导致图片丢失。现象：@ 出了但图没了 → 把图片也改走 botpy
-    或调 `msg_seq`。当前实现 markdown 用 `msg_seq=1`，待用户官方-Bot 专属环境实测。**（仅用户能验证，本机无 astrbot/botpy）**
-  - 实现要点：`_send_official_markdown(event, content, at_openid=..., kb=...)` 复用 `_send_qq_keyboard` 的 botpy 路由
-    （`bot.api._http.request`、`Route("POST","/v2/groups/{group_openid}/messages" | "/v2/users/{openid}/messages")`、
-    `msg_type=2` + `MarkdownPayload(content=...)` + `msg_id` + `msg_seq=1`）。`_official_group_mention_openid(event)`
-    仅在「官方 Bot 且群聊且 sender 非纯数字 openid」时返回 openid，其余返回 None（走 `format_mention_reply` 降级）。
+  - **用户新规（v2.4.23，硬性）**：@ 提及必须与回复内容在**同一条消息**、不可拆分；所有回复开头都要带归属。
+  - **文本回复（钓鱼/签到/面板/`/选`）**：官方 Bot 群聊走 `msg_type=2` markdown，把 `<@!openid>\n{文本}` 写进
+    `markdown.content`（逻辑收敛到 `main.py::send_mention_text`）—— 单条消息、@ 可点，已满足新规。
+  - **图片回复（状态/背包/图鉴）平台硬限制**：图片是 `msg_type=7`，**无法内嵌 @**；消息引用(Reply 段)官方 Bot 同样不支持
+    （适配器静默丢弃，见下方排障备忘）。因此图片回复**不能**在「同一条消息」里放可点 @，也不能引用原消息。
+    **用户拍板方案（v2.4.23）**：把昵称（`👤` 前缀）画在图片顶部作为归属，直接发**单条图片消息**
+    （`send_mention_then_image` 现仅 `event.image_result`，不再拆 markdown @ + 图片；v2.4.22 的两条消息做法已撤销）。
+    `draw/state.py` / `draw/backpack.py` / `draw/pokedex.py` 顶部昵称已加 `👤 ` 前缀。NapCat 等仍
+    `chain_result([Plain(CQ:at), Image])`（本就是一条消息、@ 可点）；私聊直接发图。
+  - 实现要点：`_send_official_markdown(event, content, at_openid=..., kb=..., msg_seq=1)` 复用 `_send_qq_keyboard` 的
+    botpy 路由（`bot.api._http.request`、`Route("POST","/v2/groups/{group_openid}/messages" | "/v2/users/{openid}/messages")`、
+    `msg_type=2` + `MarkdownPayload(content=...)` + `msg_id` + `msg_seq=1`）。`_official_group_mention_openid(event)` 仅在
+    「官方 Bot 且群聊且 sender 非纯数字 openid」时返回 openid，其余返回 None（走 `format_mention_reply` 降级）。
 - **⚠️ `chain_result` 铁律（v2.4.18→v2.4.19，仍有效）**：
   - **`event.chain_result(chain)` 的 `chain` 必须是 `List[BaseMessageComponent]`（组件列表），绝不能传 `MessageChain` 对象**！
     AstrBot `result_decorate/stage.py` 对 `result.chain` 调 `len()`，`MessageChain` 无 `__len__` →
