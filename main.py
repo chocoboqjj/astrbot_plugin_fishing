@@ -4,7 +4,6 @@ from typing import Optional
 
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, filter, MessageChain
-from astrbot.api.message_components import Plain, Image
 from astrbot.api.star import Context, Star
 from astrbot.core.star.filter.permission import PermissionType
 
@@ -721,29 +720,14 @@ class FishingPlugin(Star):
         yield event.plain_result(format_mention_reply(event, text))
 
     async def send_mention_then_image(self, event: AstrMessageEvent, image_path: str):
-        """发送「带 @ 的图片回覆」。
+        """发送图片回复，不带 @ 提及。
 
-        官方 Bot 群聊：图片 msg_type=7 无法内嵌 @，故先发 markdown <@!openid> 渲染 @，再发图片
-        （两条消息，平台硬限制；满足「@ 必须可渲染」的官方规范）。图片消息用 msg_seq=2 错开框架首条
-        （seq=1）被动回复，降低同 (msg_id, msg_seq) 冲突导致图片丢失的风险。
-        其余：NapCat 用 chain(Plain[CQ:at] + Image)；私聊直接发图。
-        **仅当入站触发消息为纯文字时才 @**；含图片/文件/媒体触发则不 @，直接发图。
+        规则：图片回复类指令（/状态、/背包、/图鉴等）不 @ 触发者。
+        QQ 官方 Bot 下图片 msg_type=7 无法内嵌 @，且拆分「@ + 图」两条消息会打扰用户；
+        因此统一只发图片。NapCat/私聊同样不发 @。
 
         调用方：`async for r in self.send_mention_then_image(event, path): yield r`
         """
-        if not incoming_message_has_media(event):
-            openid = self._official_group_mention_openid(event)
-            if openid:
-                ok = await self._send_official_markdown(event, "", at_openid=openid, msg_seq=2)
-                if ok:
-                    yield event.image_result(image_path)
-                    return
-            # 降级：chain(Plain @ + Image) 或纯图片
-            mention = format_mention_reply(event, "")
-            if mention:
-                yield event.chain_result([Plain(mention), Image(file=image_path)])
-                return
-        # 含媒体触发：不 @，直接发图
         yield event.image_result(image_path)
 
     # =========== 背包与资产 ==========
