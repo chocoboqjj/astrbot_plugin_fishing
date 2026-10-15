@@ -1,5 +1,27 @@
 # 📦 更新记录
 
+## v2.4.22 (修正官方 Bot 群聊 @ 群成员不渲染)
+- **🐛 修正官方 Bot 群聊 @ 群成员「显示成字面 `<@!openid>`、不渲染成可点 @」**：
+  根因：此前 `<@!openid>` 写在**普通文本回复**（`msg_type=0` / `Plain` 组件）里。按 QQ 官方 Bot 文档，
+  @ 群成员**只有在 Markdown(`msg_type=2`) 的 `markdown.content` 中写 `<@!openid>` 才会被平台渲染成可点 @**；
+  写在纯文本里只会被当成普通字符串（即此前「@ 功能仍不正确」的真因）。
+- **改法（严格对齐官方规范）**：
+  - 新增 `main.py::send_mention_text(event, text)`：官方 Bot 群聊下直接走 botpy 原生 HTTP 发
+    `msg_type=2` markdown（`<@!openid>\n{文本}` 写在 `markdown.content`），@ 才会渲染；非官方 Bot / 私聊 /
+    发送失败降级 `plain_result`（沿用 `format_mention_reply` 的 `[CQ:at,qq=...]` / 原样）。
+  - 新增 `main.py::send_mention_then_image(event, path)` + `_send_official_markdown` + `_official_group_mention_openid`：
+    复用 `_send_qq_keyboard` 已验证的 botpy markdown 通道，统一所有个人回复的 @ 逻辑。
+  - **图片消息 `msg_type=7`（状态 / 背包 / 图鉴）平台硬限制无法内嵌 @**，故官方 Bot 群聊改为
+    「先 markdown `<@!openid>` 渲染 @，再发图片」两条消息；非官方 / 私聊仍 `chain_result([Plain(CQ:at), Image])` 或纯图。
+- **影响范围**：`main.py`（新增 4 个方法）、`common_handlers.sign_in`/`state`、`fishing_handlers.fish`/`fish_pokedex`、
+  `inventory_handlers.user_backpack`、`main.py::quick_menu`/`quick_select` 的个人回复统一改走 `send_mention_text` /
+  `send_mention_then_image`。NapCat 的 `[CQ:at,qq=...]` 与私聊行为完全不变。
+- 校验：`py_compile` 全部改动文件通过；`MarkdownPayload(content=...)` 字段与已验证的键盘发送一致。
+- ⚠️ 待用户在其「官方 Bot 专属」环境实测确认 @ 已渲染；若图片指令出现「@ 出了但图没了」，说明双被动回复
+  `msg_seq` 冲突，需把图片也走 botpy 或调整 `msg_seq`（见 MEMORY.md 排障备忘）。
+
+---
+
 ## v2.4.21 (修复 Image 构造参数写成 file_path 导致崩溃)
 - **🐛 修复 `/状态` 等图片回复崩溃**：v2.4.19 把图片回复写成 `Image(file_path=path)`，运行期报
   `Image.__init__() missing 1 required positional argument: 'file'`。根因：该 AstrBot 版本的 `Image` 消息组件

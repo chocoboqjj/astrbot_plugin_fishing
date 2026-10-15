@@ -41,12 +41,9 @@ async def user_backpack(plugin: "FishingPlugin", event: AstrMessageEvent):
             # 保存图像到临时文件
             image_path = os.path.join(plugin.tmp_dir, "user_backpack.png")
             image.save(image_path)
-            # 群聊下在「同一条消息」里 @ 发送方 + 发图片（避免拆成两条）
-            _mention = format_mention_reply(event, "")
-            if _mention:
-                yield event.chain_result([Plain(_mention), Image(file=image_path)])
-            else:
-                yield event.image_result(image_path)
+            # 与 /状态、/图鉴 一致：官方 Bot 群聊先 markdown @ 再图片，其余 chain/纯图
+            async for r in plugin.send_mention_then_image(event, image_path):
+                yield r
             
             # 如果内容被截断或过滤，额外发送提示
             if backpack_data.get('is_truncated', False):

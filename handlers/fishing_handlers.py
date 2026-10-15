@@ -107,7 +107,8 @@ class FishingHandlers:
         if not result:
             yield event.plain_result("❌ 出错啦！请稍后再试。")
             return
-        yield event.plain_result(format_mention_reply(event, _build_fish_message(result, fishing_cost)))
+        async for r in self.plugin.send_mention_text(event, _build_fish_message(result, fishing_cost)):
+            yield r
 
     async def auto_fish(self, event: AstrMessageEvent):
         """自动钓鱼"""
@@ -230,12 +231,9 @@ class FishingHandlers:
                 data_dir=self.plugin.data_dir,
                 event=event,
             )
-            # 群聊下在「同一条消息」里 @ 发送方 + 发图片（与个人状态/背包一致）
-            _mention = format_mention_reply(event, "")
-            if _mention:
-                yield event.chain_result([Plain(_mention), Image(file=output_path)])
-            else:
-                yield event.image_result(output_path)
+            # 与 /状态、/背包 一致：官方 Bot 群聊先 markdown @ 再图片，其余 chain/纯图
+            async for r in self.plugin.send_mention_then_image(event, output_path):
+                yield r
         except Exception as e:
             logger.error(f"绘制图鉴图片失败: {e}", exc_info=e)
             yield event.plain_result("❌ 绘制图鉴时发生错误，请稍后再试或联系管理员。")

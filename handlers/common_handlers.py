@@ -25,7 +25,8 @@ async def sign_in(self: "FishingPlugin", event: AstrMessageEvent):
     user_id = self._get_effective_user_id(event)
     result = self.user_service.daily_sign_in(user_id)
     if result["success"]:
-        yield event.plain_result(format_mention_reply(event, result["message"]))
+        async for r in self.send_mention_text(event, result["message"]):
+            yield r
 
 async def fishing_class(self: "FishingPlugin", event: AstrMessageEvent):
     """查看钓鱼阶级（段位制·纯增益型）"""
@@ -64,12 +65,10 @@ async def state(self: "FishingPlugin", event: AstrMessageEvent):
     # 保存图像到临时文件
     image_path = os.path.join(self.tmp_dir, "user_status.png")
     image.save(image_path)
-    # 群聊下在「同一条消息」里 @ 发送方 + 发图片（避免拆成两条）
-    _mention = format_mention_reply(event, "")
-    if _mention:
-        yield event.chain_result([Plain(_mention), Image(file=image_path)])
-    else:
-        yield event.image_result(image_path)
+    # 官方 Bot 群聊：先 markdown @ 再图片（图片 msg_type=7 无法内嵌 @，平台硬限制拆两条）；
+    # 其余：chain(Plain @ + Image) 或纯图片（统一走 send_mention_then_image 处理）
+    async for r in self.send_mention_then_image(event, image_path):
+        yield r
 
 async def fishing_log(self: "FishingPlugin", event: AstrMessageEvent):
     """查看钓鱼记录"""

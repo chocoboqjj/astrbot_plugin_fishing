@@ -1,8 +1,10 @@
 import os
 import asyncio
+from typing import Optional
 
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, filter, MessageChain
+from astrbot.api.message_components import Plain, Image
 from astrbot.api.star import Context, Star
 from astrbot.core.star.filter.permission import PermissionType
 
@@ -475,7 +477,8 @@ class FishingPlugin(Star):
         if kb and self._is_qq_official(event) and hasattr(event, "bot"):
             sent = await self._send_qq_keyboard(event, text, kb)
         if not sent:
-            yield event.plain_result(format_mention_reply(event, text))
+            async for r in self.send_mention_text(event, text):
+                yield r
 
     @filter.command("选", alias={"快捷选", "m"})
     async def quick_select(self, event: AstrMessageEvent):
@@ -492,19 +495,23 @@ class FishingPlugin(Star):
                 arg = arg[len(prefix):].strip()
                 break
         if not arg.isdigit():
-            yield event.plain_result(format_mention_reply(event, "用法：/选 <序号>，例如 /选 1 开始钓鱼。先发 /面板 查看编号。"))
+            async for r in self.send_mention_text(event, "用法：/选 <序号>，例如 /选 1 开始钓鱼。先发 /面板 查看编号。"):
+                yield r
             return
         idx = int(arg)
         cmd = get_menu_cmd(idx)
         method_name = get_menu_method(idx)
         if not cmd or not method_name:
-            yield event.plain_result(format_mention_reply(event, f"序号 {idx} 超出范围，请发 /面板 查看可用项（共 {len(MENU_ITEMS)} 项）。"))
+            async for r in self.send_mention_text(event, f"序号 {idx} 超出范围，请发 /面板 查看可用项（共 {len(MENU_ITEMS)} 项）。"):
+                yield r
             return
         method = getattr(self, method_name, None)
         if method is None:
-            yield event.plain_result(format_mention_reply(event, "⚠️ 该指令暂不可通过面板执行，请直接发送 /" + cmd))
+            async for r in self.send_mention_text(event, "⚠️ 该指令暂不可通过面板执行，请直接发送 /" + cmd):
+                yield r
             return
-        yield event.plain_result(format_mention_reply(event, f"⚡ 执行：/{cmd}"))
+        async for r in self.send_mention_text(event, f"⚡ 执行：/{cmd}"):
+            yield r
         async for r in method(event):
             yield r
 
@@ -589,6 +596,147 @@ class FishingPlugin(Star):
         except Exception as e:
             logger.warning(f"[菜单] 官方Bot键盘发送失败，降级为纯文本：{e}")
         return False
+
+    async def _send_official_markdown(
+        self,
+        event: AstrMessageEvent,
+        content: str,
+        *,
+        at_openid: "Optional[str]" = None,
+        kb: "Optional[dict]" = None,
+    ) -> bool:
+        """
+        best-effort：通过 botpy 原生 HTTP 以 msg_type=2（markdown）发送消息。
+
+        ⚠️ 官方 Bot 的 @ 群成员只有写在 markdown.content 里（`<@!openid>`）才会被平台
+        渲染成「可点击 @」；若写在普通 msg_type=0 文本里（如 Plain 组件），平台只会把它
+        当成纯文本，@ 永远不生效 —— 这正是此前 @ 长期不正确的根因（参考 qq_official 官方文档
+        「消息 · Markdown 模板」一节）。
+
+        可选 kb 用于在同一 markdown 消息上挂键盘按钮（与 _send_qq_keyboard 共用此通道）。
+        任意失败返回 False，由调用方回退 plain_result / chain_result。
+        """
+        try:
+            from botpy.http import Route
+            from botpy.types.message import MarkdownPayload
+        except Exception as e:
+            logger.debug(f"[markdown] 官方Bot markdown 不可用（botpy 未安装）：{e}")
+            return False
+
+        bot = getattr(event, "bot", None)
+        if bot is None or getattr(bot, "api", None) is None:
+            logger.debug("[markdown] 官方Bot markdown 跳过：event.bot / bot.api 缺失")
+            return False
+        raw = getattr(getattr(event, "message_obj", None), "raw_message", None)
+        if raw is None:
+            logger.debug("[markdown] 官方Bot markdown 跳过：message_obj.raw_message 缺失")
+            return False
+
+        # 拼接 @：@ 必须位于 markdown.content 开头才会渲染
+        md = content or "\u200b"  # QQ markdown content 不可为空，空时用零宽占位
+        if at_openid:
+            md = f"<@!{at_openid}>\n{content}" if content else f"<@!{at_openid}>"
+
+        msg_id = get_message_id(raw)
+        payload: dict = {
+            "msg_type": 2,  # 2 = markdown 消息
+            "markdown": MarkdownPayload(content=md),
+            "msg_id": msg_id,  # 被动回复触发消息
+            "msg_seq": 1,
+        }
+        if kb is not None:
+            payload["keyboard"] = kb
+
+        kind, target = get_official_route_target(raw)
+        if kind == "group":
+            route = Route(
+                "POST",
+                "/v2/groups/{group_openid}/messages",
+                group_openid=target,
+            )
+        elif kind == "c2c":
+            route = Route(
+                "POST",
+                "/v2/users/{openid}/messages",
+                openid=target,
+            )
+        else:
+            logger.debug(
+                f"[markdown] 官方Bot markdown 跳过：未能从 raw_message（{type(raw).__name__}）"
+                f"提取 group_openid / user_openid，详见 [detect] 日志"
+            )
+            return False
+
+        try:
+            await bot.api._http.request(route, json=payload)
+            return True
+        except Exception as e:
+            logger.warning(f"[markdown] 官方Bot markdown 发送失败，降级为纯文本：{e}")
+        return False
+
+    def _official_group_mention_openid(self, event) -> "Optional[str]":
+        """官方 Bot 群聊下返回需 @ 的成员 openid（=event.get_sender_id()）；否则 None。
+
+        - 非官方 Bot（NapCat 等）：返回 None，由 format_mention_reply 用 [CQ:at,qq=...]。
+        - 私聊 / C2C：返回 None（@ 无意义）。
+        - 官方 Bot 群聊且 sender 为非纯数字 openid：返回该 openid，供 markdown <@!openid> 使用。
+        """
+        if not self._is_qq_official(event):
+            return None
+        try:
+            gid = event.get_group_id()
+        except Exception:
+            gid = None
+        if not gid:
+            return None  # 私聊 / 频道非群，不 @
+        try:
+            sid = event.get_sender_id()
+        except Exception:
+            sid = None
+        if not sid:
+            return None
+        sid = str(sid)
+        if sid.isdigit():
+            # NapCat / aiocqhttp 纯数字 QQ 号走 [CQ:at,qq=...]（理论上不会到这，
+            # 因为 _is_qq_official 已排除 NapCat，但保留防御）
+            return None
+        return sid
+
+    async def send_mention_text(self, event: AstrMessageEvent, text: str):
+        """发送「带 @ 的文本回覆」：官方 Bot 群聊走 markdown（@ 可渲染），其余降级 plain_result。
+
+        调用方必须以 `async for r in self.send_mention_text(event, text): yield r` 形式包裹。
+        官方 Bot 群聊且 markdown 发送成功时本方法不产生 yield（消息已由 botpy HTTP 直发）。
+        """
+        openid = self._official_group_mention_openid(event)
+        if openid:
+            ok = await self._send_official_markdown(event, text, at_openid=openid)
+            if ok:
+                return
+        # 降级：plain_result（NapCat 的 [CQ:at,qq=...] / 私聊原样）
+        yield event.plain_result(format_mention_reply(event, text))
+
+    async def send_mention_then_image(self, event: AstrMessageEvent, image_path: str):
+        """发送「带 @ 的图片回覆」。
+
+        官方 Bot 群聊：图片 msg_type=7 无法内嵌 @，故先发 markdown <@!openid> 渲染 @，再发图片
+        （两条消息，平台硬限制；满足「@ 必须可渲染」的官方规范）。
+        其余：NapCat 用 chain(Plain[CQ:at] + Image)；私聊直接发图。
+
+        调用方：`async for r in self.send_mention_then_image(event, path): yield r`
+        """
+        openid = self._official_group_mention_openid(event)
+        if openid:
+            ok = await self._send_official_markdown(event, "", at_openid=openid)
+            if ok:
+                yield event.image_result(image_path)
+                return
+        # 降级：chain(Plain @ + Image) 或纯图片
+        mention = format_mention_reply(event, "")
+        if mention:
+            yield event.chain_result([Plain(mention), Image(file=image_path)])
+        else:
+            yield event.image_result(image_path)
 
     # =========== 背包与资产 ==========
 
