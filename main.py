@@ -718,21 +718,22 @@ class FishingPlugin(Star):
         yield event.plain_result(format_mention_reply(event, text))
 
     async def send_mention_then_image(self, event: AstrMessageEvent, image_path: str):
-        """发送「带归属的图片回覆」（单条消息，不拆分）。
+        """发送「带 @ 的图片回覆」。
 
-        用户硬性要求：@ 提及必须与回复内容在**同一条消息**中、不可拆分；且所有回复开头都要带归属。
-        但 QQ 官方 Bot 平台硬限制：图片消息(msg_type=7)无法内嵌任何文字/@，@ 只有 markdown 才渲染。
-        因此图片类回复采用「用户拍板」的方案——把昵称（👤 前缀）画在图片顶部（见各 draw_* 函数），
-        直接发**单条图片消息**即满足「同一条消息 + 开头带归属」。NapCat 等仍走 `chain(Plain[CQ:at]+Image)`
-        （本就是一条消息，@ 可点）。私聊直接发图。
+        官方 Bot 群聊：图片 msg_type=7 无法内嵌 @，故先发 markdown <@!openid> 渲染 @，再发图片
+        （两条消息，平台硬限制；满足「@ 必须可渲染」的官方规范）。图片消息用 msg_seq=2 错开框架首条
+        （seq=1）被动回复，降低同 (msg_id, msg_seq) 冲突导致图片丢失的风险。
+        其余：NapCat 用 chain(Plain[CQ:at] + Image)；私聊直接发图。
 
         调用方：`async for r in self.send_mention_then_image(event, path): yield r`
         """
-        if self._official_group_mention_openid(event):
-            # 官方 Bot 群聊：直接发单条图片（昵称已画在图上作为归属），绝不再发一条 markdown @（会拆成两条）
-            yield event.image_result(image_path)
-            return
-        # 非官方 Bot：NapCat 用 chain(Plain[CQ:at] + Image) 单条消息；私聊直接发图
+        openid = self._official_group_mention_openid(event)
+        if openid:
+            ok = await self._send_official_markdown(event, "", at_openid=openid, msg_seq=2)
+            if ok:
+                yield event.image_result(image_path)
+                return
+        # 降级：chain(Plain @ + Image) 或纯图片
         mention = format_mention_reply(event, "")
         if mention:
             yield event.chain_result([Plain(mention), Image(file=image_path)])
