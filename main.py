@@ -48,7 +48,7 @@ from .core.qq_official import (  # noqa: E402 官方 Bot 多信号检测（按�
     get_official_route_target,
     get_message_id,
 )
-from .utils import format_mention_reply  # noqa: E402 群聊回复 @ 发送方
+from .utils import format_mention_reply, incoming_message_has_media  # noqa: E402 群聊回复 @ 发送方（仅纯文字触发才 @）
 
 # ==========================================================
 # 导入所有指令函数
@@ -706,15 +706,18 @@ class FishingPlugin(Star):
     async def send_mention_text(self, event: AstrMessageEvent, text: str):
         """发送「带 @ 的文本回覆」：官方 Bot 群聊走 markdown（@ 可渲染），其余降级 plain_result。
 
+        仅当入站触发消息为「纯文字」时才 @；含图片/文件/媒体则不 @（见 incoming_message_has_media）。
+
         调用方必须以 `async for r in self.send_mention_text(event, text): yield r` 形式包裹。
         官方 Bot 群聊且 markdown 发送成功时本方法不产生 yield（消息已由 botpy HTTP 直发）。
         """
-        openid = self._official_group_mention_openid(event)
-        if openid:
-            ok = await self._send_official_markdown(event, text, at_openid=openid)
-            if ok:
-                return
-        # 降级：plain_result（NapCat 的 [CQ:at,qq=...] / 私聊原样）
+        if not incoming_message_has_media(event):
+            openid = self._official_group_mention_openid(event)
+            if openid:
+                ok = await self._send_official_markdown(event, text, at_openid=openid)
+                if ok:
+                    return
+        # 降级：plain_result（NapCat 的 [CQ:at,qq=...] / 私聊原样 / 含媒体触发则不 @）
         yield event.plain_result(format_mention_reply(event, text))
 
     async def send_mention_then_image(self, event: AstrMessageEvent, image_path: str):
@@ -724,21 +727,24 @@ class FishingPlugin(Star):
         （两条消息，平台硬限制；满足「@ 必须可渲染」的官方规范）。图片消息用 msg_seq=2 错开框架首条
         （seq=1）被动回复，降低同 (msg_id, msg_seq) 冲突导致图片丢失的风险。
         其余：NapCat 用 chain(Plain[CQ:at] + Image)；私聊直接发图。
+        **仅当入站触发消息为纯文字时才 @**；含图片/文件/媒体触发则不 @，直接发图。
 
         调用方：`async for r in self.send_mention_then_image(event, path): yield r`
         """
-        openid = self._official_group_mention_openid(event)
-        if openid:
-            ok = await self._send_official_markdown(event, "", at_openid=openid, msg_seq=2)
-            if ok:
-                yield event.image_result(image_path)
+        if not incoming_message_has_media(event):
+            openid = self._official_group_mention_openid(event)
+            if openid:
+                ok = await self._send_official_markdown(event, "", at_openid=openid, msg_seq=2)
+                if ok:
+                    yield event.image_result(image_path)
+                    return
+            # 降级：chain(Plain @ + Image) 或纯图片
+            mention = format_mention_reply(event, "")
+            if mention:
+                yield event.chain_result([Plain(mention), Image(file=image_path)])
                 return
-        # 降级：chain(Plain @ + Image) 或纯图片
-        mention = format_mention_reply(event, "")
-        if mention:
-            yield event.chain_result([Plain(mention), Image(file=image_path)])
-        else:
-            yield event.image_result(image_path)
+        # 含媒体触发：不 @，直接发图
+        yield event.image_result(image_path)
 
     # =========== 背包与资产 ==========
 

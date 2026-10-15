@@ -12,6 +12,28 @@ import asyncio
 from astrbot.api import logger
 
 
+# 媒体类消息组件类型（用于判断入站消息是否含图片/文件/语音/视频，决定是否 @）
+_MEDIA_COMPONENT_TYPES = frozenset({"Image", "File", "Voice", "Record", "Video"})
+
+
+def incoming_message_has_media(event) -> bool:
+    """判断入站消息是否包含图片/文件/语音/视频等媒体内容。
+
+    @ 提及规则：仅对「纯文字」入站消息执行 @；含媒体的消息不 @。
+    通过遍历 message_obj.message 的组件类型判断（不依赖 botpy，各平台通用）。
+    """
+    message_obj = getattr(event, "message_obj", None)
+    if message_obj is None:
+        return False
+    message = getattr(message_obj, "message", None)
+    if not message:
+        return False
+    for comp in message:
+        if type(comp).__name__ in _MEDIA_COMPONENT_TYPES:
+            return True
+    return False
+
+
 def format_mention_reply(event, text: str) -> str:
     """群聊下在回复文本前拼接发送方 @ 提及，私聊/异常原样返回。
 
@@ -19,6 +41,7 @@ def format_mention_reply(event, text: str) -> str:
     - 官方 Bot(openid，非纯数字)：`<@!openid>`（QQ 官方 Bot 内联提及语法，平台会渲染成可点 @）。
     - NapCat / aiocqhttp(纯数字 QQ 号)：`[CQ:at,qq=...]`。
     - 私聊 / C2C：`get_group_id()` 为空，不 @（无意义）。
+    - **⚠️ 媒体触发不 @**：入站消息含图片/文件/语音/视频等媒体时，不拼接 @（纯文字消息才 @）。
     text 为空时（如图片回复前想单独 @）只返回提及串本身。
     """
     try:
@@ -29,6 +52,9 @@ def format_mention_reply(event, text: str) -> str:
     except Exception:
         gid = None
     if not gid:
+        return text
+    # 仅纯文字消息才 @：入站含媒体（图片/文件/语音/视频）则不 @
+    if incoming_message_has_media(event):
         return text
     try:
         sender = event.get_sender_id()

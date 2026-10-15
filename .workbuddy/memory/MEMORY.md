@@ -4,7 +4,7 @@
 - **每次提交都必须同步更新 `README.md`**，使文档与实际功能/配置保持一致。
   （用户原话：「每次提交readme也记得更新」）
 - 提交前应确认：README 已反映本轮改动的玩法、配置、命令与依赖变化。
-- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.24）。
+- 版本号遵循 `metadata.yaml` / `README.md` / `CHANGELOG.md` 三处同步（当前 2.4.25）。
 
 ## 排障备忘
 - **`fish.db` 残留是「用户已注册」类问题的第一嫌疑**。用户重置环境时若没删干净 `fish.db`，
@@ -89,6 +89,10 @@
     botpy 路由（`bot.api._http.request`、`Route("POST","/v2/groups/{group_openid}/messages" | "/v2/users/{openid}/messages")`、
     `msg_type=2` + `MarkdownPayload(content=...)` + `msg_id` + `msg_seq=1`）。`_official_group_mention_openid(event)` 仅在
     「官方 Bot 且群聊且 sender 非纯数字 openid」时返回 openid，其余返回 None（走 `format_mention_reply` 降级）。
+  - **📌 @ 触发规则（v2.4.25，按入站消息类型）**：@ 是否执行由**入站触发消息类型**决定，不是由回复内容决定。
+    `utils.incoming_message_has_media(event)` 遍历 `message_obj.message` 组件类型（`Image/File/Voice/Record/Video` 算媒体），
+    纯文字（无媒体）才 @，含媒体则不 @。`format_mention_reply` 与 `send_mention_text`/`send_mention_then_image` 均先判该标志。
+    即：玩家发纯文字指令 → 回复 @；玩家消息夹带图片/文件 → 回复不带 @。NapCat `[CQ:at]` 与官方 `<@!openid>` 同步受约束。
   - **v2.4.23 歪路（已撤销）**：曾按「同一条消息」新规把昵称(`👤`)画在图片上、图片发单条，v2.4.24 用户决定移除，
     回退本方案；`draw/state.py`/`draw/backpack.py`/`draw/pokedex.py` 的 `👤` 前缀与「归属」注释已全部清理，无残留。
 - **⚠️ `chain_result` 铁律（v2.4.18→v2.4.19，仍有效）**：

@@ -1,5 +1,21 @@
 # 📦 更新记录
 
+## v2.4.25 (按入站消息类型区分 @：仅纯文字触发才 @)
+- **📌 新规则**：@ 提及是否执行，**由「入站触发消息」的类型决定**，而非回复内容类型——
+  - 入站为**纯文字**（不含图片/文件/语音/视频等媒体）→ 回复带 @ 提及；
+  - 入站含**任何媒体**（图片/文件/语音/视频/录音）→ 回复**不 @**。
+- **实现**：
+  - `utils.py` 新增 `incoming_message_has_media(event)`：遍历 `message_obj.message` 组件类型
+    （`Image/File/Voice/Record/Video` 视为媒体），不依赖 botpy、跨平台通用。
+  - `utils.format_mention_reply` 全局遵守：群聊下仅当入站纯文字才拼接 @，含媒体则原样返回（不 @）。
+  - `main.py::send_mention_text` / `send_mention_then_image` 在走 markdown @（官方 Bot）前先判
+    `incoming_message_has_media`，含媒体则直接 plain / 直接发图（不 @）。
+- **效果**：`/钓鱼` `/签到` `/状态` `/背包` `/图鉴` `/面板` `/选` 等——玩家发纯文字指令 → 回复 @；
+  玩家消息夹带图片/文件 → 回复不带 @。NapCat 的 `[CQ:at,qq=...]` 与官方 Bot 的 markdown `<@!openid>` 同步受该规则约束。
+- 校验：单测（桩 event）验证 5 类场景（纯文字官方/NapCat、含图官方、含文件NapCat、私聊）@ 行为正确；`py_compile` 通过。
+
+---
+
 ## v2.4.24 (移除昵称绘制，回退至 v2.4.22 @ 方案)
 - **↩️ 撤销 v2.4.23「图上画昵称」方案**：经用户决定，移除图片上绘制昵称（`👤` 前缀）的相关逻辑，
   回退到 v2.4.22 既定的 @ 实现方案（文本 markdown @ 单条、图片 markdown @ + 图片两条）。
