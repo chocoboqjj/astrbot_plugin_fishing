@@ -604,6 +604,7 @@ class FishingPlugin(Star):
         *,
         at_openid: "Optional[str]" = None,
         kb: "Optional[dict]" = None,
+        msg_seq: int = 1,
     ) -> bool:
         """
         best-effort：通过 botpy 原生 HTTP 以 msg_type=2（markdown）发送消息。
@@ -642,7 +643,7 @@ class FishingPlugin(Star):
             "msg_type": 2,  # 2 = markdown 消息
             "markdown": MarkdownPayload(content=md),
             "msg_id": msg_id,  # 被动回复触发消息
-            "msg_seq": 1,
+            "msg_seq": msg_seq,
         }
         if kb is not None:
             payload["keyboard"] = kb
@@ -727,7 +728,9 @@ class FishingPlugin(Star):
         """
         openid = self._official_group_mention_openid(event)
         if openid:
-            ok = await self._send_official_markdown(event, "", at_openid=openid)
+            # 图片回复 = markdown @ 与框架图片两条被动回复；用 msg_seq=2 错开框架首条(seq=1)，
+            # 降低同 (msg_id, msg_seq) 被动回复冲突导致图片丢失的风险（仅官方 Bot 群聊触发）
+            ok = await self._send_official_markdown(event, "", at_openid=openid, msg_seq=2)
             if ok:
                 yield event.image_result(image_path)
                 return
